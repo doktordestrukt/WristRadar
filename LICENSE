@@ -1,0 +1,168 @@
+WristRadar Source-Available License, version 1.0
+
+Copyright (c) 2026 doktordestrukt (aka ellie). All rights reserved.
+
+This is not an open-source license. The Software is published so that people
+can read it, study it and use it. It is not published so that people can
+re-publish it.
+
+1. Definitions
+
+"Author" means doktordestrukt (aka ellie), the copyright holder.
+
+"Software" means everything in the Official Repository: the WristRadar Wear OS
+app, the WristRadar PC companion, their source code, compiled binaries
+(including APK and EXE files), protocol and security designs, build scripts,
+tests and documentation, in any version, and any part, translation, port or
+compiled, decompiled or disassembled form of them.
+
+"Official Repository" means the GitHub repository the Author publishes the
+Software in, and its GitHub release pages.
+
+"Modified Version" means anything that copies, changes, adapts, translates,
+ports, rebuilds, recompiles or patches the Software or any part of it, or is
+derived from it, in source or binary form.
+
+"Distribute" means to make available to anyone other than yourself by any
+means, including uploading, hosting, mirroring, re-uploading, attaching,
+bundling, sharing a link to a copy that is not in the Official Repository,
+or including the Software in an app store listing, installer or other package.
+
+2. What you may do
+
+Subject to every condition of this License, the Author grants you a
+personal, non-exclusive, non-transferable, non-sublicensable, revocable,
+free-of-charge permission to:
+
+  a. view and read the Software on GitHub;
+  b. download the Software from the Official Repository only;
+  c. build the Software from the Official Repository, unmodified, and install
+     and use it on devices you own or are allowed to use;
+  d. decompile, disassemble, debug and otherwise study the Software,
+     including its compiled binaries and its security design, for the purpose
+     of understanding how it works, finding bugs or reporting security issues;
+  e. make changes to your own private copy for your own personal testing, as
+     long as the changed copy is never Distributed and is never shown in
+     public as source code; and
+  f. fork the Official Repository on GitHub only to the extent the GitHub
+     Terms of Service require, and only to prepare a pull request back to the
+     Official Repository. A fork must not be used to publish, promote or
+     distribute a Modified Version, and must be deleted or brought back in
+     line with the Official Repository if the Author asks.
+
+3. What you may not do
+
+Anything this License does not expressly permit is forbidden. In
+particular, without the Author's prior written permission you may not:
+
+  a. Distribute the Software, or any copy of it, anywhere other than through
+     the Official Repository on GitHub. This includes other code hosts, app
+     stores (including Google Play and the Galaxy Store), file sharing sites,
+     Discord, forums and video descriptions;
+  b. publish, Distribute or publicly display a Modified Version, in source
+     or binary form, on any platform, including GitHub;
+  c. publish decompiled, disassembled or reconstructed source code of the
+     Software, in whole or in substantial part;
+  d. sell, rent, lease, license, charge for access to, or otherwise make
+     money from the Software or a Modified Version, including putting it
+     behind a paywall, donation gate or subscription;
+  e. remove, hide or change the copyright notice, the Author's name, this
+     License or any credit to the Author;
+  f. claim that you wrote the Software, or that the Author endorses you,
+     your project or your content;
+  g. use the Software or any part of it, including its protocol, pairing or
+     encryption design and code, to build a competing messenger or product
+     that you Distribute;
+  h. use the Software to spy on, track, harass or gain unauthorised access to
+     any person, device, account or network, or to intercept communications
+     you are not a party to;
+  i. get around any condition of this License by indirect means, such as
+     asking someone else to do what you may not do, splitting the Software
+     into parts, renaming it, or using an automated tool to rewrite it.
+
+Short quotations of the Software in a bug report, issue, pull request,
+security report or discussion about the Software are allowed.
+
+4. Contributions
+
+If you send a pull request, patch, issue or other contribution to the
+Official Repository, you confirm you have the right to do so, and you grant
+the Author a perpetual, worldwide, irrevocable, royalty-free right to use,
+change, relicense and Distribute it as part of the Software. You do not gain
+any other right in the Software by contributing.
+
+5. Security and privacy
+
+The Software is a personal project. It has not been independently audited.
+It is not intended for situations where safety, life, liberty or money
+depends on the confidentiality of communications. You alone are responsible
+for how you use it, for the devices you install it on, and for following the
+laws that apply to radio devices and encryption where you are.
+
+6. Third-party components
+
+The Software uses third-party libraries (including Google Tink, Bouncy
+Castle, AndroidX/Jetpack, Kotlin coroutines and NAudio). Those parts remain
+under their own licenses, which are listed in THIRD_PARTY_NOTICES.md. This
+License does not limit any right those licenses give you to those parts on
+their own, and does not give you any right in them that their own licenses do
+not give. WristRadar is not affiliated with or endorsed by Samsung, Google or
+the authors of those libraries.
+
+7. No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, SECURITY AND
+NON-INFRINGEMENT. YOU USE THE SOFTWARE ENTIRELY AT YOUR OWN RISK.
+
+8. Limitation of liability
+
+TO THE FULLEST EXTENT PERMITTED BY LAW, IN NO EVENT WILL THE AUTHOR OR ANY
+CONTRIBUTOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR EXEMPLARY, INCLUDING
+LOSS OF DATA, LOSS OF PRIVACY, INTERCEPTED OR DISCLOSED COMMUNICATIONS,
+HARDWARE OR SOFTWARE DAMAGE, OR LOSS OF PROFITS, ARISING FROM OR IN
+CONNECTION WITH THE SOFTWARE OR THIS LICENSE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+9. Indemnity
+
+You agree to defend and hold the Author harmless from any claim, loss or
+cost, including reasonable legal fees, that arises from your use of the
+Software or your breach of this License.
+
+10. Termination and enforcement
+
+Your permission under this License ends automatically, without notice, the
+moment you break any of its conditions. When it ends you must stop using the
+Software and delete every copy you have, including any Modified Version.
+Copies or Modified Versions Distributed or published in breach of this
+License may be removed through copyright takedown notices (such as DMCA
+notices) and any other remedy available by law. The Author may also end your
+permission at any time for any reason by telling you. Sections 3, 5 and 7 to
+13 continue to apply after your permission ends.
+
+11. Changes to this License
+
+The Author may publish a new version of this License in the Official
+Repository. A new version applies to every version of the Software released
+after it is published. Nothing in this License gives anyone a right to use
+an older version under terms the Author did not grant.
+
+12. Reservation of rights
+
+The Author keeps every right not expressly granted in this License. No right
+is granted by implication, estoppel, past conduct or failure to enforce. If
+the Author does not enforce a condition, that is not a waiver of it.
+
+13. General
+
+If any part of this License is held unenforceable, that part is changed only
+as much as needed to make it enforceable, and the rest stays in full effect.
+This License is the entire agreement about the Software between you and the
+Author. Headings are for convenience only. If a translation of this License
+differs from this English text, the English text applies.
+
+For permission to do anything this License does not allow, contact the
+Author through the Official Repository.

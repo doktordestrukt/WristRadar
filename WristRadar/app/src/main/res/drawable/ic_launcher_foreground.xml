@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Radar rings with a sweep and a blip. 108dp adaptive canvas, safe zone is the inner 66dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#B266FF" android:strokeWidth="2.5" android:fillColor="#00000000"
+        android:pathData="M54,25 a29,29 0 1,0 0.01,0 z" />
+    <path android:strokeColor="#7A3DCC" android:strokeWidth="2" android:fillColor="#00000000"
+        android:pathData="M54,38 a16,16 0 1,0 0.01,0 z" />
+    <path android:fillColor="#55B266FF"
+        android:pathData="M54,54 L54,25 A29,29 0 0,1 79.1,39.5 Z" />
+    <path android:strokeColor="#E0B8FF" android:strokeWidth="2.5" android:fillColor="#00000000"
+        android:pathData="M54,54 L79.1,39.5" />
+    <path android:fillColor="#E0B8FF"
+        android:pathData="M66,44 a3.2,3.2 0 1,0 0.01,0 z" />
+    <path android:fillColor="#B266FF"
+        android:pathData="M54,51 a3,3 0 1,0 0.01,0 z" />
+</vector>

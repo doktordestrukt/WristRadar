@@ -1,0 +1,29 @@
+# --- secrets: never publish ---
+*.jks
+*.keystore
+keystore.properties
+local.properties
+
+# --- user-supplied audio (not licensed for redistribution) ---
+WristRadar/app/src/main/res/raw/*.mp3
+WristRadarPC/Assets/*.mp3
+
+# --- build outputs / binaries ---
+**/build/
+**/.gradle/
+**/bin/
+**/obj/
+**/dist/
+*.apk
+*.aab
+*.exe
+*.pdb
+*.dll
+**/.kotlin/
+**/.idea/
+**/.vs/
+*.iml
+*.log
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/

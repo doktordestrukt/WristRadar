@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WristRadar</string>
+    <string name="channel_service">Connection service</string>
+    <string name="channel_messages">Messages</string>
+    <string name="channel_messages_quiet">Messages (silent)</string>
+</resources>
