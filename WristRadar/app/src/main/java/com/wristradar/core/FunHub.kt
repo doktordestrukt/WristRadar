@@ -237,7 +237,7 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
     // ------------------------------------------------------------------ shared to-do list
 
     fun addTodo(text: String) {
-        val t = text.trim().take(120); if (t.isEmpty()) return
+        val t = text.trim().take(120); if (t.isEmpty() || _todos.value.size >= MAX_TODOS) return
         val id = UUID.randomUUID().toString()
         _todos.update { it + TodoItem(id, t, false, true) }
         saveTodos()
@@ -261,7 +261,7 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
         val op = r.b().toInt()
         val id = r.uuid().toString()
         when (op) {
-            0 -> { val t = r.str(400).take(120); if (_todos.value.none { it.id == id }) _todos.update { it + TodoItem(id, t, false, false) } }
+            0 -> { val t = r.str(400).take(120); if (_todos.value.size < MAX_TODOS && _todos.value.none { it.id == id }) _todos.update { it + TodoItem(id, t, false, false) } }
             1 -> { val d = r.b().toInt() == 1; _todos.update { l -> l.map { if (it.id == id) it.copy(done = d) else it } } }
             2 -> _todos.update { l -> l.filter { it.id != id } }
         }
@@ -418,6 +418,8 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
         for (l in lines) if (b[l[0]] != 0 && b[l[0]] == b[l[1]] && b[l[1]] == b[l[2]]) return b[l[0]]
         return 0
     }
+
+    companion object { const val MAX_TODOS = 100 }
 
     // ------------------------------------------------------------------ vibration
 

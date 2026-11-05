@@ -24,6 +24,13 @@ import com.wristradar.service.WristRadarService
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.wristradar.ui.blackbox.BlackboxOverlay
 import com.wristradar.ui.screens.AboutScreen
 import com.wristradar.ui.screens.BlackboxSettingsScreen
@@ -181,7 +188,6 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("games") { com.wristradar.ui.screens.GamesScreen(nav) }
         composable("game") { com.wristradar.ui.screens.GameScreen(nav) }
         composable("taps") { com.wristradar.ui.screens.TapCodeScreen(nav) }
-        composable("secret") { com.wristradar.ui.screens.SecretScreen(nav) }
         composable("sos") { com.wristradar.ui.screens.SosScreen(nav) }
         composable("hideseek") { com.wristradar.ui.screens.HideSeekScreen() }
         composable("todo") { com.wristradar.ui.screens.TodoScreen() }
@@ -200,6 +206,12 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("picker/{purpose}") { ImagePickerScreen(nav, it.arguments?.getString("purpose") ?: "chat") }
         composable("preview/{purpose}") { ImagePreviewScreen(nav, it.arguments?.getString("purpose") ?: "chat") }
     }
+    // Back: the watch's back key / swipe goes to the previous screen instead of leaving the app,
+    // and a small "‹" button on the left edge does the same.
+    val route = entry?.destination?.route
+    val canGoBack = route != null && route != "home" && nav.previousBackStackEntry != null
+    androidx.activity.compose.BackHandler(enabled = canGoBack) { nav.popBackStack() }
+    if (canGoBack && route != "call") BackButton { nav.popBackStack() }
     // Overlays above every screen: in-app banner, security warning (users), BLACKBOX (intruder only).
     com.wristradar.ui.components.TopBanner(onOpen = { nav.navigate("chat") { launchSingleTop = true } })
     com.wristradar.ui.blackbox.SecurityWarningOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
@@ -207,5 +219,19 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     com.wristradar.ui.screens.BlastOverlay()
     com.wristradar.ui.screens.SosOverlay(onWalk = { nav.navigate("walk") { launchSingleTop = true } })
     BlackboxOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
+    }
+}
+
+@Composable
+private fun BackButton(onBack: () -> Unit) {
+    val p = com.wristradar.ui.theme.LocalPalette.current
+    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.CenterStart) {
+        Box(
+            Modifier.padding(start = 2.dp).size(28.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(p.surface.copy(alpha = 0.85f))
+                .clickable(onClickLabel = "Back") { onBack() },
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) { androidx.wear.compose.material.Text("‹", fontSize = 20.sp, color = p.text) }
     }
 }

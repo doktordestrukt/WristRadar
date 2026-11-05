@@ -258,7 +258,9 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
         if (_state.value.githubBusy) return
         _state.update { it.copy(githubBusy = true, github = "Looking for Wi-Fi…") }
         try {
-            val net = wifiNetwork()
+            val req = wifiNetwork()
+            wifiRelease = req?.second
+            val net = req?.first
             if (net == null) { _state.update { it.copy(github = "No Wi-Fi - will try again later") }; return }
             _state.update { it.copy(github = "Checking GitHub…") }
             val release = withContext(Dispatchers.IO) { latestRelease(net) }
@@ -274,6 +276,7 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
             Log.w(TAG, "github update check failed: ${e.javaClass.simpleName}")
             _state.update { it.copy(github = if (manual) "Couldn't reach GitHub" else "Couldn't reach GitHub - will retry") }
         } finally {
+            wifiRelease?.invoke(); wifiRelease = null
             _state.update { it.copy(githubBusy = false) }
         }
     }
@@ -342,22 +345,29 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
     }
 
     /** Wear OS normally routes traffic through the phone; ask for a real Wi-Fi network instead. */
-    private suspend fun wifiNetwork(): Network? {
+    @Volatile private var wifiRelease: (() -> Unit)? = null
+
+    /** Returns the Wi-Fi network plus a function that releases it (so Wi-Fi isn't kept awake). */
+    private suspend fun wifiNetwork(): Pair<Network, () -> Unit>? {
         val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return null
         val req = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build()
-        return withTimeoutOrNull(25_000) {
-            suspendCancellableCoroutine { cont ->
-                val cb = object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        if (cont.isActive) cont.resume(network)
-                    }
-                }
-                runCatching { cm.requestNetwork(req, cb) }.onFailure { if (cont.isActive) cont.resume(null) }
-                cont.invokeOnCancellation { runCatching { cm.unregisterNetworkCallback(cb) } }
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            @Volatile var net: Network? = null
+            var waiter: ((Network?) -> Unit)? = null
+            override fun onAvailable(network: Network) { net = network; waiter?.invoke(network) }
+        }
+        val release = { runCatching { cm.unregisterNetworkCallback(cb) }; Unit }
+        if (runCatching { cm.requestNetwork(req, cb) }.isFailure) return null
+        val net = withTimeoutOrNull(25_000) {
+            cb.net ?: suspendCancellableCoroutine<Network?> { cont ->
+                cb.waiter = { n -> if (cont.isActive) runCatching { cont.resume(n) } }
+                cb.net?.let { if (cont.isActive) runCatching { cont.resume(it) } }   // arrived before the waiter was set
             }
         }
+        if (net == null) { release(); return null }
+        return net to release
     }
 
     // ------------------------------------------------------------------ verify + install

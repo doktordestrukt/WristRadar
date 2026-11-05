@@ -89,7 +89,6 @@ fun FunMenuScreen(nav: NavHostController) {
         item { WrChip("💥 Emoji blast", { nav.navigate("blast") }, secondary = "Fill their screen") }
         item { WrChip("🎮 Games", { nav.navigate("games") }, secondary = "Rock paper scissors, tic-tac-toe, reaction duel") }
         item { WrChip("📳 Tap code", { nav.navigate("taps") }, secondary = "Silent vibration messages") }
-        item { WrChip("🤫 Secret message", { nav.navigate("secret") }, secondary = "Hold to reveal / vanishes after reading") }
         item { WrChip("🌡 Hide & seek", { nav.navigate("hideseek") }, secondary = "Warmer or colder") }
         item { WrChip("📝 Shared to-do list", { nav.navigate("todo") }) }
         item { WrChip("😎 My status", { nav.navigate("mood") }, secondary = g.engine.extras.myMood ?: "Set a mood") }
@@ -452,26 +451,6 @@ fun TapCodeScreen(nav: NavHostController) {
             }
             note?.let { Text(it, fontSize = 10.sp, color = p.textDim) }
         }
-    }
-}
-
-// ------------------------------------------------------------------------------- secret messages
-
-@Composable
-fun SecretScreen(nav: NavHostController) {
-    val g = WristRadarApp.graph
-    val scope = rememberCoroutineScope()
-    var flags by remember { mutableStateOf(3) }
-    val pv = g.engine.updater.state.collectAsState().value.partner
-    val input = rememberTextInput { text -> scope.launch { g.engine.messenger.sendText(text, secret = flags); nav.popBackStack() } }
-    WrScreen {
-        item { SectionLabel("Secret message") }
-        if (pv != null && (pv.versionCode < 4 || !pv.isWatch)) item {
-            Hint("${g.profile.partnerName.value ?: "Your friend"} is on ${pv.label}. Secrets will wait and send once they update.")
-        }
-        item { WrChip("🔥 Vanishing", { flags = 3; input("Vanishing message") }, secondary = "Hold to read, then it's deleted on both watches") }
-        item { WrChip("🙈 Hold to reveal", { flags = 2; input("Hidden message") }, secondary = "Blurred until they press and hold") }
-        item { Hint("Older WristRadar versions can't open secret messages - they'll be told to update.") }
     }
 }
 
