@@ -50,6 +50,15 @@ fun MessageActionsScreen(nav: NavHostController, id: String) {
         if (all != null && m == null) { item { Hint("This message was deleted.") }; return@WrScreen }
         if (m == null) return@WrScreen
         item { Text(snippet(m), fontSize = 12.sp, color = p.textDim, maxLines = 3, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
+        item {
+            // Message info: when it was sent and what happened to it.
+            val time = android.text.format.DateFormat.format("EEE d MMM, HH:mm", m.sentAt).toString()
+            val state = if (!m.outgoing) "Received" else when (m.status) {
+                com.wristradar.data.db.MsgStatus.SEEN -> "Seen ✓✓"; com.wristradar.data.db.MsgStatus.DELIVERED -> "Delivered ✓✓"
+                com.wristradar.data.db.MsgStatus.FAILED -> "Not sent"; else -> "Sending…"
+            }
+            Text("$time · $state" + if (m.edited) " · edited" else "", fontSize = 10.sp, color = p.textDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
         item { SectionLabel("React") }
         QuickReactions.chunked(4).forEachIndexed { i, row ->
             item(key = "r$i") {
@@ -147,6 +156,16 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "✂️ Crop & resize" to "Zoom, move and rotate your profile picture before using it.",
+        "🖼 Profile banners" to "Add a wide banner to your profile. Your friend sees it too.",
+        "✨ Profile effects" to "Sparkles, glow, rainbow, orbiting stars, snow, flames, petals and more.",
+        "📅 Day dividers" to "Today / Yesterday / dates between messages.",
+        "↓ Jump to latest" to "One tap back to the newest message.",
+        "❤️ Double-tap" to "Double-tap a message to heart it.",
+        "⚡ Quick replies" to "Edit your own one-tap replies. Settings › Notifications.",
+        "🔠 Text size" to "Make chat text smaller or bigger.",
+        "🔕 Mute" to "Mute notifications for 1 h, 8 h or until you unmute.",
+        "🔋 Friend's battery" to "Shown in the chat header, with message info when you hold a message.",
         "💎 Liquid glass" to "12 new liquid glass themes, and frosted glass buttons and bubbles on every theme.",
         "🧸 Icon packs" to "10 icon packs with glossy glass tiles. Settings › Appearance.",
         "📱 App icons" to "Pick a glass app icon for your app list.",

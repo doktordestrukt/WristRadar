@@ -180,6 +180,25 @@ fun SettingsScreen(nav: NavHostController) {
     )
 }
 
+/** Set by the nav host so settings can open the quick replies editor. */
+object QuickRepliesNav { var go: (() -> Unit)? = null }
+
+/** Edit the quick reply buttons shown under the chat. */
+@Composable
+fun QuickRepliesScreen() {
+    val g = WristRadarApp.graph
+    val s by g.settings.state.collectAsState()
+    val add = com.wristradar.ui.components.rememberTextInput { t: String -> val q = t.trim().take(30); if (q.isNotEmpty()) g.settings.update { it.copy(quickReplies = (it.quickReplies + q).distinct().take(8)) } }
+    WrScreen {
+        item { SectionLabel("Quick replies") }
+        if (s.quickReplies.size < 8) item { WrChip("+ Add a quick reply", { add("Quick reply") }, primary = true) }
+        s.quickReplies.forEach { q ->
+            item(key = q) { WrChip(q, { g.settings.update { it.copy(quickReplies = it.quickReplies - q) } }, secondary = "Tap to remove") }
+        }
+        item { Hint("Up to 8. They show as one-tap buttons under the chat.") }
+    }
+}
+
 @Composable
 fun NotificationSettingsScreen() {
     val g = WristRadarApp.graph
@@ -191,6 +210,22 @@ fun NotificationSettingsScreen() {
         item { WrToggle("Vibration", s.vibration, "Buzz on new messages") { v -> g.settings.update { it.copy(vibration = v) } } }
         item { WrToggle("Message previews", s.previews, "Show text in notifications") { v -> g.settings.update { it.copy(previews = v) } } }
         item { WrToggle("Sound", s.sound, "Uses the watch's notification sound") { v -> g.settings.update { it.copy(sound = v) } } }
+        item { SectionLabel("Mute") }
+        if (s.muted) item {
+            val until = if (s.mutedUntil == Long.MAX_VALUE) "until you unmute" else "until " + java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(s.mutedUntil))
+            WrChip("🔕 Unmute", { g.settings.update { it.copy(mutedUntil = 0) } }, secondary = "Muted $until", primary = true)
+        } else {
+            item { WrChip("Mute for 1 hour", { g.settings.update { it.copy(mutedUntil = System.currentTimeMillis() + 3_600_000) } }) }
+            item { WrChip("Mute for 8 hours", { g.settings.update { it.copy(mutedUntil = System.currentTimeMillis() + 8 * 3_600_000L) } }) }
+            item { WrChip("Mute until I unmute", { g.settings.update { it.copy(mutedUntil = Long.MAX_VALUE) } }) }
+        }
+        item { SectionLabel("Chat") }
+        item {
+            val sizes = com.wristradar.data.TextSize.entries
+            WrChip("Message text size", { g.settings.update { it.copy(chatText = sizes[(sizes.indexOf(it.chatText) + 1) % sizes.size]) } },
+                secondary = s.chatText.label + " (tap to change)")
+        }
+        item { WrChip("Quick replies", { QuickRepliesNav.go?.invoke() }, secondary = s.quickReplies.joinToString(" · ")) }
         item {
             WrChip("System notification settings", {
                 runCatching {

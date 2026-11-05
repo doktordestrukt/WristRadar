@@ -68,7 +68,7 @@ class Notifier(private val ctx: Context, private val settings: SettingsStore) {
     @SuppressLint("MissingPermission")
     fun showMessage(sender: String, preview: String, unread: Int) {
         val s = settings.current
-        if (!s.notifications) return
+        if (!s.notifications || s.muted) return
         if (canPost()) {
             val reply = NotificationCompat.Action.Builder(
                 R.drawable.ic_keyboard, "Reply",

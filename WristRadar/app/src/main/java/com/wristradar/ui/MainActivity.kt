@@ -57,7 +57,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /** Screens where swiping right must not close the screen (drawing, games, holding buttons). */
-private val NoSwipeRoutes = setOf("call", "draw", "game", "taps")
+private val NoSwipeRoutes = setOf("call", "draw", "game", "taps", "crop/{purpose}")
 
 /** Small in-memory hand-off between the picker and preview screens. */
 /** Bumped when a call notification is tapped so the call screen opens. */
@@ -175,13 +175,19 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
             val slot = runCatching { ColorSlot.valueOf(it.arguments?.getString("slot") ?: "") }.getOrDefault(ColorSlot.PRIMARY)
             ColorPickerScreen(nav, slot)
         }
-        composable("notifications") { NotificationSettingsScreen() }
+        composable("notifications") {
+            com.wristradar.ui.screens.QuickRepliesNav.go = { nav.navigate("quickreplies") }
+            NotificationSettingsScreen()
+        }
         composable("privacy") { PrivacyScreen() }
         composable("connection") { ConnectionInfoScreen() }
         composable("about") { AboutScreen() }
         composable("msg/{id}") { com.wristradar.ui.screens.MessageActionsScreen(nav, it.arguments?.getString("id") ?: "") }
         composable("pinned") { com.wristradar.ui.screens.PinnedScreen(nav) }
         composable("search") { com.wristradar.ui.screens.SearchScreen(nav) }
+        composable("crop/{purpose}") { com.wristradar.ui.screens.CropScreen(nav, it.arguments?.getString("purpose") ?: "avatar") }
+        composable("effects") { com.wristradar.ui.screens.EffectPickerScreen(nav) }
+        composable("quickreplies") { com.wristradar.ui.screens.QuickRepliesScreen() }
         composable("fun") { com.wristradar.ui.screens.FunMenuScreen(nav) }
         composable("draw") { com.wristradar.ui.screens.DrawScreen(nav) }
         composable("blast") { com.wristradar.ui.screens.BlastScreen(nav) }

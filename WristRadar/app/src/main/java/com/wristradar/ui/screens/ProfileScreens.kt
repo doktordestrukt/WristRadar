@@ -1,5 +1,9 @@
 package com.wristradar.ui.screens
 
+import androidx.compose.material.icons.filled.Star
+
+import androidx.compose.material.icons.filled.Delete
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -77,12 +81,14 @@ fun MyProfileScreen(nav: NavHostController) {
     val presence by g.engine.presence.collectAsState()
     val editBio = rememberTextInput { t -> g.profile.setMyBio(t); g.engine.pushProfile() }
     val partner by g.trust.partner.collectAsState()
+    val banner by g.profile.myBanner.collectAsState()
+    val effect by g.profile.myEffect.collectAsState()
     val editName = rememberTextInput { t ->
         g.profile.setMyName(t)
         g.engine.pushProfile()      // synced over the encrypted channel; identity keys unchanged
     }
     WrScreen {
-        item { Box(Modifier.clickable { nav.navigate("picker/avatar") }) { Avatar(avatar, name, 72.dp) } }
+        item { ProfileHeader(banner, avatar, name, effect, onBanner = { nav.navigate("picker/banner") }, onAvatar = { nav.navigate("picker/avatar") }) }
         item { Text(name, fontSize = 17.sp, color = p.text) }
         item { Text(bio.ifBlank { "No bio yet" }, fontSize = 12.sp, color = if (bio.isBlank()) p.textDim else p.text, textAlign = TextAlign.Center) }
         item { Hint("Your display name. It is not your security identity.") }
@@ -92,6 +98,9 @@ fun MyProfileScreen(nav: NavHostController) {
         item {
             WrChip("Change profile picture", { nav.navigate("picker/avatar") }, icon = { Icon(painterResource(R.drawable.ic_image), null) })
         }
+        item { WrChip(if (banner == null) "Add a banner" else "Change banner", { nav.navigate("picker/banner") }, secondary = "Crop it to fit", icon = { Icon(painterResource(R.drawable.ic_image), null) }) }
+        if (banner != null) item { WrChip("Remove banner", { g.profile.setMyBanner(null); g.engine.pushProfile() }, icon = { Icon(Icons.Filled.Delete, null) }) }
+        item { WrChip("Profile effect", { nav.navigate("effects") }, secondary = effect.label, icon = { Icon(Icons.Filled.Star, null) }) }
         if (avatar != null) item {
             WrChip("Use default avatar", { g.profile.setMyAvatar(null); g.engine.pushProfile() }, icon = { Icon(Icons.Filled.Face, null) })
         }
@@ -116,8 +125,10 @@ fun PartnerProfileScreen() {
     val lastSeen by g.trust.partnerLastSeen.collectAsState()
     val last by g.trust.lastConnected.collectAsState()
     val fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val pBanner by g.profile.partnerBanner.collectAsState()
+    val pEffect by g.profile.partnerEffect.collectAsState()
     WrScreen {
-        item { Avatar(avatar, name, 72.dp) }
+        item { ProfileHeader(pBanner, avatar, name, pEffect) }
         item { Text(name ?: "No partner", fontSize = 17.sp, color = p.text) }
         if (pBio.isNotBlank()) item { Text(pBio, fontSize = 12.sp, color = p.text, textAlign = TextAlign.Center) }
         item { Text(com.wristradar.ui.components.presenceText(conn.phase == com.wristradar.core.Phase.CONNECTED, lastSeen), fontSize = 11.sp, color = p.primary) }
@@ -205,7 +216,8 @@ fun ImagePickerScreen(nav: NavHostController, purpose: String) {
         scope.launch {
             val bmp = withContext(Dispatchers.IO) { Images.decodeUri(ctx, uri, 1024) }
             loading = false
-            if (bmp != null) { UiShared.pickedBitmap = bmp; nav.navigate("preview/$purpose") }
+            // Profile pictures and banners go to the crop & resize screen first.
+            if (bmp != null) { UiShared.pickedBitmap = bmp; nav.navigate(if (purpose == "avatar" || purpose == "banner") "crop/$purpose" else "preview/$purpose") }
             else pickError = "That picture can't be opened on the watch. It may only be stored in the cloud, or in an unsupported format."
         }
     }
@@ -228,7 +240,7 @@ fun ImagePickerScreen(nav: NavHostController, purpose: String) {
     }
 
     WrScreen {
-        item { SectionLabel(if (purpose == "avatar") "Profile picture" else "Send a picture") }
+        item { SectionLabel(when (purpose) { "avatar" -> "Profile picture"; "banner" -> "Profile banner"; else -> "Send a picture" }) }
         if (loading) item { CircularProgressIndicator(Modifier.size(28.dp)) }
         pickError?.let { e -> item { Text(e, fontSize = 11.sp, color = p.danger, textAlign = TextAlign.Center) } }
         if (galleryIntents.isNotEmpty()) item {

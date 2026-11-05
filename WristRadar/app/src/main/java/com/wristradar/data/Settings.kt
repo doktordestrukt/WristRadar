@@ -40,6 +40,8 @@ enum class AppIcon(val label: String, val alias: String) {
     LILAC("Lilac glass", ".ui.LauncherLilac"),
 }
 
+enum class TextSize(val label: String, val sp: Float) { SMALL("Small", 12f), NORMAL("Normal", 14f), LARGE("Large", 16f), HUGE("Extra large", 18f) }
+
 enum class ButtonShape(val label: String) { ROUND("Round"), SOFT("Soft square"), SQUARE("Square") }
 
 /** All colours are ARGB ints. */
@@ -143,6 +145,10 @@ data class Settings(
     val liquidGlass: Boolean = true,
     val iconPack: IconPack = IconPack.MATCH,
     val appIcon: AppIcon = AppIcon.CLASSIC,
+    val chatText: TextSize = TextSize.NORMAL,
+    /** Notifications muted until this time (ms), 0 = not muted, Long.MAX_VALUE = until unmuted. */
+    val mutedUntil: Long = 0,
+    val quickReplies: List<String> = listOf("👍", "OK", "On my way", "Call me", "😂"),
     /** Last app version whose "What's new" screen was shown. */
     val seenVersion: Int = 0,
     /** Send my newer app to my friend's watch over Bluetooth automatically. */
@@ -159,6 +165,8 @@ data class Settings(
     /** Buzz when the partner is about to go out of range / is lost. */
     val rangeAlert: Boolean = true,
 ) {
+    val muted: Boolean get() = mutedUntil > System.currentTimeMillis()
+
     val gradient: List<Int>?
         get() = if (themeId == ThemePresets.CUSTOM_ID) null else ThemePresets.byId(themeId)?.gradient
     /** Theme draws liquid "waves" behind the glass. */
@@ -210,6 +218,9 @@ class SettingsStore(context: Context) {
             walkSpeed = prefs.getFloat("walk_speed", d.walkSpeed),
             rangeAlert = prefs.getBoolean("range_alert", d.rangeAlert),
             liquidGlass = prefs.getBoolean("glass", d.liquidGlass),
+            chatText = runCatching { TextSize.valueOf(prefs.getString("chat_text", d.chatText.name)!!) }.getOrDefault(d.chatText),
+            mutedUntil = prefs.getLong("muted_until", d.mutedUntil),
+            quickReplies = prefs.getString("quick_replies", null)?.split('\u001F')?.filter { it.isNotBlank() }?.take(8) ?: d.quickReplies,
             iconPack = runCatching { IconPack.valueOf(prefs.getString("icon_pack", d.iconPack.name)!!) }.getOrDefault(d.iconPack),
             appIcon = runCatching { AppIcon.valueOf(prefs.getString("app_icon", d.appIcon.name)!!) }.getOrDefault(d.appIcon),
         ).let { s ->
@@ -244,6 +255,8 @@ class SettingsStore(context: Context) {
             .putBoolean("upd_github", s.githubUpdates).putLong("upd_gh_last", s.lastGithubCheck)
             .putInt("height", s.heightCm).putFloat("walk_speed", s.walkSpeed)
             .putBoolean("range_alert", s.rangeAlert)
+            .putString("chat_text", s.chatText.name).putLong("muted_until", s.mutedUntil)
+            .putString("quick_replies", s.quickReplies.joinToString("\u001F"))
             .putBoolean("glass", s.liquidGlass).putString("icon_pack", s.iconPack.name).putString("app_icon", s.appIcon.name)
             .apply()
         _state.value = s

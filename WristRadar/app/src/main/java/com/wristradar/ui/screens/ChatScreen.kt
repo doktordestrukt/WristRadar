@@ -145,6 +145,7 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     WrScreen(state = listState) {
         item {
             Row(
@@ -152,12 +153,18 @@ fun ChatScreen(nav: NavHostController) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Avatar(partnerAvatar, partnerName, 28.dp)
+                val pEffect by g.profile.partnerEffect.collectAsState()
+                EffectAvatar(partnerAvatar, partnerName, 28.dp, pEffect)
                 Spacer(Modifier.width(6.dp))
                 Column {
                     Text(partnerName ?: "Partner", fontSize = 14.sp, color = p.text)
                     val mood by g.engine.extras.partnerMood.collectAsState()
                     mood?.let { Text(it, fontSize = 9.sp, color = p.textDim, maxLines = 1) }
+                    val extra = listOfNotNull(
+                        conn.remoteBattery?.takeIf { conn.phase == Phase.CONNECTED }?.let { "🔋$it%" },
+                        if (g.settings.state.collectAsState().value.muted) "🔕" else null,
+                    )
+                    if (extra.isNotEmpty()) Text(extra.joinToString(" "), fontSize = 9.sp, color = p.textDim)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         StatusDot(conn.phase, 6.dp)
                         val streak = list?.let { streakDays(it) } ?: 0
@@ -194,7 +201,13 @@ fun ChatScreen(nav: NavHostController) {
         }
         if (list != null && list.isEmpty()) item { Hint("No messages yet. Say hi 👋") }
         val byId = list?.associateBy { it.id }.orEmpty()
+        var lastDay: java.time.LocalDate? = null
         list?.forEach { m ->
+            val day = java.time.Instant.ofEpochMilli(m.localTime).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            if (day != lastDay) {
+                lastDay = day
+                item(key = "day-$day") { DayDivider(day) }
+            }
             if (m.id == firstUnreadId) item(key = "unread-divider") {
                 Text("— NEW —", style = WrType.label, color = p.primary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
@@ -207,6 +220,7 @@ fun ChatScreen(nav: NavHostController) {
                     quoted = m.replyTo?.let { byId[it] },
                     onLongPress = { nav.navigate("msg/${m.id}") },
                     onReactTap = { e -> scope.launch { g.engine.messenger.react(m.id, e) } },
+                    onDoubleTap = { if (!m.isAlert && !m.isInfo) scope.launch { g.engine.messenger.react(m.id, "❤️") } },
                 )
             }
         }
@@ -249,7 +263,7 @@ fun ChatScreen(nav: NavHostController) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("👍", "OK", "On my way").forEach { q ->
+                    g.settings.state.collectAsState().value.quickReplies.take(3).forEach { q ->
                         CompactChip(
                             onClick = { scope.launch { g.engine.messenger.sendText(q) } },
                             enabled = partner != null,
@@ -283,6 +297,34 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
     }
+    // Jump back to the newest message when scrolled up.
+    val total = listState.layoutInfo.totalItemsCount
+    val away = total > 0 && listState.centerItemIndex < total - 5
+    if (away) {
+        Box(Modifier.fillMaxSize().padding(bottom = 22.dp), contentAlignment = Alignment.BottomCenter) {
+            Text(
+                "↓ Latest", fontSize = 11.sp, color = p.onColor(p.primary),
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(p.primary.copy(alpha = 0.9f))
+                    .clickable { scope.launch { listState.animateScrollToItem(total - 1) } }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
+    }
+    }
+}
+
+/** "Today", "Yesterday" or the date, between days in the chat. */
+@Composable
+private fun DayDivider(day: java.time.LocalDate) {
+    val p = LocalPalette.current
+    val today = java.time.LocalDate.now()
+    val label = when (day) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> day.format(java.time.format.DateTimeFormatter.ofPattern(if (day.year == today.year) "EEE d MMM" else "d MMM yyyy"))
+    }
+    Text(label, fontSize = 10.sp, color = p.textDim, textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp))
 }
 
 /** Message being replied to (set from the message menu, cleared on send). */
@@ -296,6 +338,7 @@ fun missingFeatures(partnerVersion: Int): String {
     if (partnerVersion < 2) f += listOf("blue ticks", "reactions", "replies", "edits")
     if (partnerVersion < 3) f += listOf("nudges", "Bluetooth updates")
     if (partnerVersion < 4) f += listOf("games", "emoji blasts", "tap code", "status")
+    if (partnerVersion < 8) f += listOf("profile banners", "profile effects")
     return f.joinToString(", ")
 }
 
@@ -312,6 +355,7 @@ private val animsEnabled: Boolean get() = WristRadarApp.graph.settings.current.a
 private fun MessageBubble(
     m: ChatMessage, animateIn: Boolean, onImage: () -> Unit, onRetry: () -> Unit,
     quoted: ChatMessage? = null, onLongPress: () -> Unit = {}, onReactTap: (String) -> Unit = {},
+    onDoubleTap: () -> Unit = {},
 ) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
@@ -364,6 +408,7 @@ private fun MessageBubble(
                         else if (m.isImage && !m.isAudio) onImage()
                     },
                     onLongClick = onLongPress,
+                    onDoubleClick = onDoubleTap,
                 )
                 .padding(if (m.isImage) 3.dp else 8.dp)
         ) {
@@ -376,7 +421,7 @@ private fun MessageBubble(
                             .background(Color.Black.copy(alpha = 0.18f)).padding(horizontal = 5.dp, vertical = 2.dp),
                     )
                 }
-                if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else Text(m.text, color = textColor, fontSize = 14.sp)
+                if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else Text(m.text, color = textColor, fontSize = WristRadarApp.graph.settings.state.collectAsState().value.chatText.sp.sp)
             }
         }
         val reacts = listOfNotNull(m.reactTheirs, m.reactMine)

@@ -19,6 +19,49 @@ class ProfileStore(private val context: Context, private val vault: KeystoreVaul
     private val dir = File(context.filesDir, "profile").apply { mkdirs() }
     private val myAvatarFile = File(dir, "me.jpg")
     private val partnerAvatarFile = File(dir, "partner.bin")
+    private val myBannerFile = File(dir, "me_banner.jpg")
+    private val partnerBannerFile = File(dir, "partner_banner.bin")
+
+    // ---- banners (wide picture at the top of the profile) and animated profile effects
+    private val _myBanner = MutableStateFlow(if (myBannerFile.exists()) BitmapFactory.decodeFile(myBannerFile.path) else null)
+    val myBanner: StateFlow<Bitmap?> = _myBanner.asStateFlow()
+    private val _partnerBanner = MutableStateFlow(loadPartnerBanner())
+    val partnerBanner: StateFlow<Bitmap?> = _partnerBanner.asStateFlow()
+    private val _myEffect = MutableStateFlow(ProfileEffect.of(prefs.getString("my_effect", null)))
+    val myEffect: StateFlow<ProfileEffect> = _myEffect.asStateFlow()
+    private val _partnerEffect = MutableStateFlow(ProfileEffect.of(prefs.getString("partner_effect", null)))
+    val partnerEffect: StateFlow<ProfileEffect> = _partnerEffect.asStateFlow()
+
+    private fun loadPartnerBanner(): Bitmap? = runCatching {
+        if (!partnerBannerFile.exists()) null
+        else vault.decrypt(partnerBannerFile.readBytes(), "wr-partner-banner")?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+    }.getOrNull()
+
+    /** Banner is already cropped to [BANNER_W] x [BANNER_H] by the crop screen. */
+    fun setMyBanner(bitmap: Bitmap?) {
+        if (bitmap == null) { myBannerFile.delete(); _myBanner.value = null; return }
+        val b = if (bitmap.width == BANNER_W && bitmap.height == BANNER_H) bitmap else Bitmap.createScaledBitmap(bitmap, BANNER_W, BANNER_H, true)
+        myBannerFile.writeBytes(Images.jpeg(b, 85))
+        _myBanner.value = b
+    }
+
+    fun myBannerForSync(): ByteArray? = _myBanner.value?.let { Images.jpeg(it, 72) }
+
+    fun setMyEffect(e: ProfileEffect) { prefs.edit().putString("my_effect", e.name).apply(); _myEffect.value = e }
+
+    fun setPartnerExtras(bannerJpeg: ByteArray?, clearBanner: Boolean, effect: String?) {
+        if (bannerJpeg != null) {
+            val bmp = BitmapFactory.decodeByteArray(bannerJpeg, 0, bannerJpeg.size)
+            if (bmp != null && bmp.width <= 1024 && bmp.height <= 1024) {
+                partnerBannerFile.writeBytes(vault.encrypt(bannerJpeg, "wr-partner-banner"))
+                _partnerBanner.value = bmp
+            }
+        } else if (clearBanner) { partnerBannerFile.delete(); _partnerBanner.value = null }
+        if (effect != null) {
+            val e = ProfileEffect.of(effect)
+            prefs.edit().putString("partner_effect", e.name).apply(); _partnerEffect.value = e
+        }
+    }
 
     private val _myName = MutableStateFlow(prefs.getString("my_name", null) ?: defaultName())
     val myName: StateFlow<String> = _myName.asStateFlow()
@@ -73,7 +116,7 @@ class ProfileStore(private val context: Context, private val vault: KeystoreVaul
         if (bitmap == null) {
             myAvatarFile.delete(); _myAvatar.value = null; return
         }
-        val sq = Images.squareCrop(bitmap, 256)
+        val sq = if (bitmap.width == 256 && bitmap.height == 256) bitmap else Images.squareCrop(bitmap, 256)
         myAvatarFile.writeBytes(Images.jpeg(sq, 85))
         _myAvatar.value = sq
     }
@@ -102,8 +145,9 @@ class ProfileStore(private val context: Context, private val vault: KeystoreVaul
     }
 
     fun clearPartner() {
-        prefs.edit().remove("partner_name").remove("partner_bio").apply()
+        prefs.edit().remove("partner_name").remove("partner_bio").remove("partner_effect").apply()
         partnerAvatarFile.delete()
+        partnerBannerFile.delete(); _partnerBanner.value = null; _partnerEffect.value = ProfileEffect.NONE
         _partnerName.value = null
         _partnerBio.value = ""
         _partnerAvatar.value = null
@@ -111,6 +155,8 @@ class ProfileStore(private val context: Context, private val vault: KeystoreVaul
 
     companion object {
         const val MAX_NAME = 20
+        const val BANNER_W = 400
+        const val BANNER_H = 160
         const val MAX_BIO = 120
         fun sanitizeBio(raw: String): String = raw.replace(Regex("[\\p{Cntrl}&&[^\\n]]"), "").trim().take(MAX_BIO)
         fun sanitizeName(raw: String): String? {
@@ -118,4 +164,11 @@ class ProfileStore(private val context: Context, private val vault: KeystoreVaul
             return t.ifEmpty { null }
         }
     }
+}
+
+/** Animated decoration drawn around a profile picture. */
+enum class ProfileEffect(val label: String) {
+    NONE("None"), GLOW("Glow ring"), RAINBOW("Rainbow ring"), SPARKLES("Sparkles"), ORBIT("Orbiting stars"),
+    BUBBLES("Bubbles"), SNOW("Snow"), FIRE("Flames"), PETALS("Petals"), AURORA("Aurora");
+    companion object { fun of(s: String?) = entries.firstOrNull { it.name == s } ?: NONE }
 }

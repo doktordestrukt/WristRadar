@@ -44,7 +44,12 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
                 val name = r.str(200)
                 val avatar = r.bytes(60_000)
                 val bio = if (r.hasMore()) r.str(600) else null
+                // V8: optional banner + profile effect (older apps don't send these).
+                val hasExtras = r.hasMore()
+                val banner = if (hasExtras) r.bytes(60_000) else null
+                val effect = if (r.hasMore()) r.str(24) else null
                 withContext(Dispatchers.IO) {
+                    if (hasExtras) g.profile.setPartnerExtras(banner?.takeIf { Images.validateJpeg(it) != null }, clearBanner = banner == null, effect = effect)
                     if (bio != null) g.profile.setPartnerBio(bio)
                     g.profile.setPartner(name, avatar?.takeIf { Images.validateJpeg(it) != null })
                     if (avatar == null) g.profile.clearPartnerAvatar()
@@ -341,7 +346,9 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     suspend fun sendProfile(s: SecureSession) {
         val avatar = withContext(Dispatchers.Default) { g.profile.myAvatarForSync() }
-        s.send(A.PROFILE, Out().str(g.profile.myName.value).bytes(avatar).str(g.profile.myBio.value).build())
+        val banner = withContext(Dispatchers.Default) { g.profile.myBannerForSync() }
+        s.send(A.PROFILE, Out().str(g.profile.myName.value).bytes(avatar).str(g.profile.myBio.value)
+            .bytes(banner).str(g.profile.myEffect.value.name).build())
     }
 
     suspend fun sendStatus(s: SecureSession, rssi: Int?): Boolean =
