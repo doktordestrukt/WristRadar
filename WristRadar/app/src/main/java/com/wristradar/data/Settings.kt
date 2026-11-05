@@ -164,6 +164,12 @@ data class Settings(
     val walkSpeed: Float = 0f,
     /** Buzz when the partner is about to go out of range / is lost. */
     val rangeAlert: Boolean = true,
+    /** Glass gleam + background drift that follow wrist tilt. */
+    val glassMotion: Boolean = true,
+    /** Tap ripples through the glass. */
+    val glassRipple: Boolean = true,
+    /** Glass dims itself from 21:00 to 07:00. */
+    val nightTint: Boolean = true,
 ) {
     val muted: Boolean get() = mutedUntil > System.currentTimeMillis()
 
@@ -218,6 +224,9 @@ class SettingsStore(context: Context) {
             walkSpeed = prefs.getFloat("walk_speed", d.walkSpeed),
             rangeAlert = prefs.getBoolean("range_alert", d.rangeAlert),
             liquidGlass = prefs.getBoolean("glass", d.liquidGlass),
+            glassMotion = prefs.getBoolean("glass_motion", d.glassMotion),
+            glassRipple = prefs.getBoolean("glass_ripple", d.glassRipple),
+            nightTint = prefs.getBoolean("night_tint", d.nightTint),
             chatText = runCatching { TextSize.valueOf(prefs.getString("chat_text", d.chatText.name)!!) }.getOrDefault(d.chatText),
             mutedUntil = prefs.getLong("muted_until", d.mutedUntil),
             quickReplies = prefs.getString("quick_replies", null)?.split('\u001F')?.filter { it.isNotBlank() }?.take(8) ?: d.quickReplies,
@@ -258,6 +267,7 @@ class SettingsStore(context: Context) {
             .putString("chat_text", s.chatText.name).putLong("muted_until", s.mutedUntil)
             .putString("quick_replies", s.quickReplies.joinToString("\u001F"))
             .putBoolean("glass", s.liquidGlass).putString("icon_pack", s.iconPack.name).putString("app_icon", s.appIcon.name)
+            .putBoolean("glass_motion", s.glassMotion).putBoolean("glass_ripple", s.glassRipple).putBoolean("night_tint", s.nightTint)
             .apply()
         _state.value = s
     }

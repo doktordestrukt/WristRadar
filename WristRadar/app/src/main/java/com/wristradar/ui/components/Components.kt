@@ -54,6 +54,7 @@ import com.wristradar.ui.theme.LocalButtonStyle
 import com.wristradar.ui.theme.LocalGlass
 import com.wristradar.ui.theme.IconTile
 import com.wristradar.ui.theme.glassRim
+import com.wristradar.ui.theme.glassGleam
 import com.wristradar.ui.theme.LocalPalette
 import com.wristradar.ui.theme.Mono
 import com.wristradar.ui.theme.WrType
@@ -234,7 +235,7 @@ fun WrChip(
         colors = colors,
         border = if (glass) ChipDefaults.chipBorder(borderStroke = androidx.compose.foundation.BorderStroke(1.dp, glassRim())) else ChipDefaults.chipBorder(),
         shape = bs.shape,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().let { if (glass && !danger) it.clip(bs.shape).glassGleam() else it },
     )
 }
 

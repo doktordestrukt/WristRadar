@@ -51,6 +51,7 @@ fun Modifier.glass(shape: Shape, tint: Color = Color.White, strength: Float = 1f
                 Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.22f), Color.Transparent), endY = size.height * 0.5f),
                 size = size.copy(height = size.height * 0.5f),
             )
+            drawGleam(0.8f)
         }
         .border(1.dp, glassRim(), shape)
 
@@ -63,6 +64,9 @@ fun LiquidBackground(colors: List<Color>) {
     Canvas(Modifier.fillMaxSize()) {
         drawRect(Brush.linearGradient(colors, start = Offset(0f, 0f), end = Offset(size.width, size.height)))
         val w = size.width; val h = size.height
+        // parallax: ribbons drift a little against the wrist tilt
+        val dx = -GlassFx.tiltX * w * 0.06f; val dy = -GlassFx.tiltY * h * 0.04f
+        drawContext.transform.translate(dx, dy)
         val ribbon1 = Path().apply {
             moveTo(-w * 0.1f, h * 0.30f)
             cubicTo(w * 0.30f, h * 0.05f, w * 0.55f, h * 0.65f, w * 1.1f, h * 0.35f)
@@ -83,6 +87,7 @@ fun LiquidBackground(colors: List<Color>) {
             Brush.radialGradient(listOf(Color.White.copy(alpha = 0.28f), Color.Transparent), center = Offset(w * 0.25f, h * 0.2f), radius = w * 0.35f),
             radius = w * 0.35f, center = Offset(w * 0.25f, h * 0.2f),
         )
+        drawContext.transform.translate(-dx, -dy)
     }
 }
 

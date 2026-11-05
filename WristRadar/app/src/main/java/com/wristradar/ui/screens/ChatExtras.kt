@@ -156,6 +156,10 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "✨ Tilt shimmer" to "Tilt your wrist and light slides across the glass, while the background drifts behind it.",
+        "💧 Tap ripples" to "Every tap sends a ripple through the glass.",
+        "🌙 Night glass" to "The glass dims itself from 9 pm to 7 am.",
+        "⚙️ Your choice" to "Switch each effect on or off in Settings › Appearance.",
         "✂️ Crop & resize" to "Zoom, move and rotate your profile picture before using it.",
         "🖼 Profile banners" to "Add a wide banner to your profile. Your friend sees it too.",
         "✨ Profile effects" to "Sparkles, glow, rainbow, orbiting stars, snow, flames, petals and more.",

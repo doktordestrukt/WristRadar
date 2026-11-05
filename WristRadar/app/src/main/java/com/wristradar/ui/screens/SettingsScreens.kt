@@ -370,6 +370,11 @@ fun AppearanceScreen(nav: NavHostController) {
         item { SectionLabel("Liquid glass themes") }
         ThemePresets.all.filter { it.glass }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
         item { WrToggle("Liquid glass effect", s.liquidGlass, "Frosted glass buttons and bubbles on every theme") { v -> g.settings.update { it.copy(liquidGlass = v) } } }
+        if (s.liquidGlass) {
+            item { WrToggle("Tilt shimmer", s.glassMotion, "Light slides across the glass as you tilt your wrist") { v -> g.settings.update { it.copy(glassMotion = v) } } }
+            item { WrToggle("Tap ripples", s.glassRipple, "Taps send a ripple through the glass") { v -> g.settings.update { it.copy(glassRipple = v) } } }
+            item { WrToggle("Night glass", s.nightTint, "Glass dims itself from 9 pm to 7 am") { v -> g.settings.update { it.copy(nightTint = v) } } }
+        }
         item { SectionLabel("Icon pack") }
         item { IconPackRow(s.iconPack) { pack -> g.settings.update { it.copy(iconPack = pack) } } }
         item { SectionLabel("App icon") }

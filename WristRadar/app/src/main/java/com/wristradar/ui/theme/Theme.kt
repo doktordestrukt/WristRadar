@@ -103,10 +103,12 @@ fun WristRadarTheme(settings: Settings, content: @Composable () -> Unit) {
             LocalButtonStyle provides WrButtonStyle(settings.buttonShape.shape(), settings.buttonGradient),
             LocalGlass provides GlassStyle(settings.liquidGlass, settings.iconPack),
         ) {
+            val fxOn = settings.liquidGlass && settings.animations != AnimationLevel.OFF
+            TiltSensor(fxOn && settings.glassMotion)
             Box(Modifier.fillMaxSize().let { if (bg != null) it.background(bg) else it.background(p.background) }) {
                 val g = settings.gradient
                 if (settings.glassBackground && g != null) LiquidBackground(g.map { Color(it) })
-                content()
+                GlassOverlay(ripples = fxOn && settings.glassRipple, nightTint = settings.liquidGlass && settings.nightTint) { content() }
                 if (settings.brightness < 0.99f) {
                     // Interface dimming overlay (does not intercept touches).
                     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = (1f - settings.brightness).coerceIn(0f, 0.7f))))

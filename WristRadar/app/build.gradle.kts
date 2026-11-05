@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 8
-val wrVersionName = "8.0.0"
-val wrReleaseLabel = "V8"
+val wrVersionCode = 9
+val wrVersionName = "9.0.0"
+val wrReleaseLabel = "MK9 Prism"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.
