@@ -51,6 +51,9 @@ import com.wristradar.core.Phase
 import com.wristradar.data.AnimationLevel
 import com.wristradar.ui.theme.LocalAnimation
 import com.wristradar.ui.theme.LocalButtonStyle
+import com.wristradar.ui.theme.LocalGlass
+import com.wristradar.ui.theme.IconTile
+import com.wristradar.ui.theme.glassRim
 import com.wristradar.ui.theme.LocalPalette
 import com.wristradar.ui.theme.Mono
 import com.wristradar.ui.theme.WrType
@@ -196,10 +199,19 @@ fun WrChip(
     primary: Boolean = false,
     danger: Boolean = false,
     enabled: Boolean = true,
+    /** Put the icon on a glossy icon-pack tile (off for avatars). */
+    tile: Boolean = true,
 ) {
     val p = LocalPalette.current
     val bs = LocalButtonStyle.current
+    val glass = LocalGlass.current.on
     val colors = when {
+        glass && !danger -> ChipDefaults.gradientBackgroundChipColors(
+            // Liquid glass: frosted white, tinted with the accent for primary buttons.
+            startBackgroundColor = if (primary || bs.gradient) p.primary.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.26f),
+            endBackgroundColor = if (primary || bs.gradient) p.secondary.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.10f),
+            contentColor = p.text, secondaryContentColor = p.text.copy(alpha = 0.72f), iconColor = p.text,
+        )
         bs.gradient && !danger -> ChipDefaults.gradientBackgroundChipColors(
             startBackgroundColor = p.primary.copy(alpha = if (primary) 0.7f else 0.45f),
             endBackgroundColor = p.secondary.copy(alpha = if (primary) 0.5f else 0.28f),
@@ -218,8 +230,9 @@ fun WrChip(
         enabled = enabled,
         label = { Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (primary) FontWeight.Bold else FontWeight.Normal) },
         secondaryLabel = secondary?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 11.sp) } },
-        icon = icon,
+        icon = icon?.let { ic -> if (tile) { { IconTile(content = ic) } } else ic },
         colors = colors,
+        border = if (glass) ChipDefaults.chipBorder(borderStroke = androidx.compose.foundation.BorderStroke(1.dp, glassRim())) else ChipDefaults.chipBorder(),
         shape = bs.shape,
         modifier = Modifier.fillMaxWidth(),
     )

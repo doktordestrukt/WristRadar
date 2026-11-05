@@ -121,6 +121,7 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                         }
                     },
                     primary = true,
+                    tile = false,
                 )
             }
             item {

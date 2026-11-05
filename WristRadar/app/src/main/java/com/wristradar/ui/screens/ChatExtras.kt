@@ -147,6 +147,9 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "💎 Liquid glass" to "12 new liquid glass themes, and frosted glass buttons and bubbles on every theme.",
+        "🧸 Icon packs" to "10 icon packs with glossy glass tiles. Settings › Appearance.",
+        "📱 App icons" to "Pick a glass app icon for your app list.",
         "🧹 Tidier" to "SOS removed.",
         "🔄 GitHub updates" to "Fixed the update check so new versions download on Wi-Fi.",
         "‹ Back button" to "The back key and the ‹ button now go to the previous screen instead of leaving the app.",

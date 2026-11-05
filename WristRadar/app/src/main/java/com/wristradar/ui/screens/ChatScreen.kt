@@ -79,6 +79,7 @@ import com.wristradar.ui.components.rememberTextInput
 import com.wristradar.ui.components.presenceText
 import com.wristradar.ui.components.TypingDots
 import com.wristradar.ui.theme.LocalPalette
+import com.wristradar.ui.theme.glass
 import com.wristradar.ui.theme.WrType
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -339,7 +340,7 @@ private fun MessageBubble(
         return
     }
     val bubble = if (m.outgoing) p.outgoing else p.incoming
-    val textColor = if (bubble.luminanceSafe() > 0.5f) Color.Black else p.text
+    val textColor = if (bubble.alpha < 0.9f || com.wristradar.ui.theme.LocalGlass.current.on) p.text else if (bubble.luminanceSafe() > 0.5f) Color.Black else p.text
     val shape = RoundedCornerShape(
         topStart = 14.dp, topEnd = 14.dp,
         bottomStart = if (m.outgoing) 14.dp else 4.dp, bottomEnd = if (m.outgoing) 4.dp else 14.dp,
@@ -351,8 +352,12 @@ private fun MessageBubble(
         },
         horizontalAlignment = if (m.outgoing) Alignment.End else Alignment.Start,
     ) {
+        val glassOn = com.wristradar.ui.theme.LocalGlass.current.on
         Box(
-            Modifier.widthIn(max = 150.dp).clip(shape).background(bubble)
+            Modifier.widthIn(max = 150.dp).let {
+                if (glassOn) it.then(Modifier.glass(shape, tint = if (m.outgoing) p.primary else Color.White, strength = if (m.outgoing) 1.6f else 1f))
+                else it.clip(shape).background(bubble)
+            }
                 .combinedClickable(
                     onClick = {
                         if (m.status == MsgStatus.FAILED && m.outgoing) onRetry()

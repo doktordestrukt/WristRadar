@@ -85,13 +85,13 @@ fun FunMenuScreen(nav: NavHostController) {
         item { SectionLabel("Fun & extras") }
         item { Text("🔥 $streak day streak", fontSize = 14.sp, color = LocalPalette.current.text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
         if (!online) item { Hint("Most of these need your friend connected.") }
-        item { WrChip("✏️ Draw & send", { nav.navigate("draw") }, secondary = "Doodle a picture") }
-        item { WrChip("💥 Emoji blast", { nav.navigate("blast") }, secondary = "Fill their screen") }
-        item { WrChip("🎮 Games", { nav.navigate("games") }, secondary = "Rock paper scissors, tic-tac-toe, reaction duel") }
-        item { WrChip("📳 Tap code", { nav.navigate("taps") }, secondary = "Silent vibration messages") }
-        item { WrChip("🌡 Hide & seek", { nav.navigate("hideseek") }, secondary = "Warmer or colder") }
-        item { WrChip("📝 Shared to-do list", { nav.navigate("todo") }) }
-        item { WrChip("😎 My status", { nav.navigate("mood") }, secondary = g.engine.extras.myMood ?: "Set a mood") }
+        item { WrChip("Draw & send", { nav.navigate("draw") }, secondary = "Doodle a picture", icon = { Text("✏️", fontSize = 15.sp) }) }
+        item { WrChip("Emoji blast", { nav.navigate("blast") }, secondary = "Fill their screen", icon = { Text("💥", fontSize = 15.sp) }) }
+        item { WrChip("Games", { nav.navigate("games") }, secondary = "Rock paper scissors, tic-tac-toe, reaction duel", icon = { Text("🎮", fontSize = 15.sp) }) }
+        item { WrChip("Tap code", { nav.navigate("taps") }, secondary = "Silent vibration messages", icon = { Text("📳", fontSize = 15.sp) }) }
+        item { WrChip("Hide & seek", { nav.navigate("hideseek") }, secondary = "Warmer or colder", icon = { Text("🌡", fontSize = 15.sp) }) }
+        item { WrChip("Shared to-do list", { nav.navigate("todo") }, icon = { Text("📝", fontSize = 15.sp) }) }
+        item { WrChip("My status", { nav.navigate("mood") }, secondary = g.engine.extras.myMood ?: "Set a mood", icon = { Text("😎", fontSize = 15.sp) }) }
     }
 }
 

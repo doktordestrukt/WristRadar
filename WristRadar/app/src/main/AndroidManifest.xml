@@ -78,12 +78,69 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:taskAffinity=""
-            android:theme="@style/Theme.WristRadar">
+            android:theme="@style/Theme.WristRadar" />
+
+        <!-- App icon choices (Settings > Appearance > App icon). Exactly one is enabled. -->
+        <activity-alias
+            android:name=".ui.LauncherClassic"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.LauncherRose"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_rose"
+            android:roundIcon="@mipmap/ic_launcher_rose"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.LauncherMidnight"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_midnight"
+            android:roundIcon="@mipmap/ic_launcher_midnight"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.LauncherAqua"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_aqua"
+            android:roundIcon="@mipmap/ic_launcher_aqua"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.LauncherLilac"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_lilac"
+            android:roundIcon="@mipmap/ic_launcher_lilac"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <service
             android:name=".service.WristRadarService"

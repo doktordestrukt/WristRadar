@@ -14,6 +14,32 @@ enum class RangeMode { MAX, BALANCED, STEALTH }
 /** Interface font (system families - nothing extra bundled in the APK). */
 enum class FontChoice(val label: String) { DEFAULT("Clean"), ROUNDED("Rounded"), SERIF("Classic serif"), MONO("Terminal mono"), CURSIVE("Handwritten"), CONDENSED("Condensed") }
 
+/**
+ * Icon pack: how icons are drawn. Glass packs put each icon on a glossy rounded tile
+ * (original artwork, inspired by liquid-glass home screens). MATCH follows the theme.
+ */
+enum class IconPack(val label: String, val tile: List<Long>?) {
+    MATCH("Match theme (glass)", null),
+    ROSE("Rose glass", listOf(0xFFF3C6CF, 0xFFD48A9B, 0xFFA85A6E)),
+    MIDNIGHT("Midnight glass", listOf(0xFF2B3A78, 0xFF16205A, 0xFF070B2A)),
+    AQUA("Aqua glass", listOf(0xFFCFF5EF, 0xFF7FD3D0, 0xFF4A9FD8)),
+    LILAC("Lilac glass", listOf(0xFFEDE2FF, 0xFFC0A8F5, 0xFF8E6FDA)),
+    CANDY("Candy", listOf(0xFFFF9AD5, 0xFFB57BFF, 0xFFFFB36B)),
+    PEACH("Peach glass", listOf(0xFFFFE3CF, 0xFFF9AE90, 0xFFE27D6C)),
+    MINT("Mint glass", listOf(0xFFDDFBEA, 0xFF9EE6C8, 0xFF4FC79C)),
+    MONO("Graphite glass", listOf(0xFF5A5A66, 0xFF2E2E36, 0xFF121216)),
+    CLASSIC("Classic (no tiles)", null);
+}
+
+/** Home-screen app icon (launcher alias). */
+enum class AppIcon(val label: String, val alias: String) {
+    CLASSIC("Classic", ".ui.LauncherClassic"),
+    ROSE("Rose glass", ".ui.LauncherRose"),
+    MIDNIGHT("Midnight glass", ".ui.LauncherMidnight"),
+    AQUA("Aqua glass", ".ui.LauncherAqua"),
+    LILAC("Lilac glass", ".ui.LauncherLilac"),
+}
+
 enum class ButtonShape(val label: String) { ROUND("Round"), SOFT("Soft square"), SQUARE("Square") }
 
 /** All colours are ARGB ints. */
@@ -48,11 +74,27 @@ fun ThemeColors.with(slot: ColorSlot, v: Int): ThemeColors = when (slot) {
 }
 
 /** gradient = background colours top-left to bottom-right (null = solid background). */
-data class ThemePreset(val id: String, val name: String, val colors: ThemeColors, val gradient: List<Int>? = null)
+data class ThemePreset(val id: String, val name: String, val colors: ThemeColors, val gradient: List<Int>? = null, val glass: Boolean = false)
 
 object ThemePresets {
     private fun c(v: Long) = v.toInt()
+    private fun glass(id: String, name: String, text: Long, primary: Long, secondary: Long, out: Long, conn: Long, vararg bg: Long) =
+        ThemePreset(id, name, ThemeColors(c(primary), c(secondary), c(bg.last()), c(0x33FFFFFF), c(text), c(0x38FFFFFF), c(out), c(conn)), bg.map { c(it) }, glass = true)
+
     val all = listOf(
+        // ---- liquid glass (default family)
+        glass("glass_rose", "Rose Glass", 0xFFFFFFFF, 0xFFFFE3EA, 0xFFF7A8B8, 0x8CB0606F, 0xFF7CFFC4, 0xFFF0C4CC, 0xFFCB8C9A, 0xFF9C5869),
+        glass("glass_midnight", "Midnight Glass", 0xFFFFFFFF, 0xFF8FB8FF, 0xFF5C7CFF, 0x8C2C4BB8, 0xFF5CFFB0, 0xFF02061F, 0xFF0D1F66, 0xFF1C3FA6),
+        glass("glass_aqua", "Aqua Glass", 0xFF06303A, 0xFF0B6E8A, 0xFF2E9BC9, 0x8C2F8FB0, 0xFF0E8C5A, 0xFFC9F2EA, 0xFF79CCCB, 0xFF3F8ED2),
+        glass("glass_lilac", "Lilac Glass", 0xFFFFFFFF, 0xFFF3EAFF, 0xFFC9B5FF, 0x8C7B5CC9, 0xFF7CFFC4, 0xFFE4D8FF, 0xFFB29CEE, 0xFF7E61CF),
+        glass("glass_peach", "Peach Glass", 0xFFFFFFFF, 0xFFFFF0E6, 0xFFFFC2A6, 0x8CC8634F, 0xFF6CFFB8, 0xFFFFDCC7, 0xFFF4A48A, 0xFFD9705F),
+        glass("glass_ice", "Ice Glass", 0xFF0F2740, 0xFF2563A8, 0xFF5A9AE0, 0x8C4F86C4, 0xFF138A57, 0xFFF4F9FF, 0xFFCFE2F6, 0xFF9DC0E8),
+        glass("glass_emerald", "Emerald Glass", 0xFFFFFFFF, 0xFFB9FFE3, 0xFF4FE3A8, 0x8C138A63, 0xFFB9FFE3, 0xFF02150F, 0xFF0A5A42, 0xFF2CB386),
+        glass("glass_sunset", "Sunset Glass", 0xFFFFFFFF, 0xFFFFD6B0, 0xFFFF8FB1, 0x8CB43A6E, 0xFF7CFFC4, 0xFF27093F, 0xFFA8306A, 0xFFFF8E57),
+        glass("glass_graphite", "Graphite Glass", 0xFFFFFFFF, 0xFFE6E6F0, 0xFF9C9CB0, 0x8C4A4A5A, 0xFF7CFFC4, 0xFF09090B, 0xFF26262E, 0xFF4A4A57),
+        glass("glass_cherry", "Cherry Glass", 0xFFFFFFFF, 0xFFFFC2CB, 0xFFFF6B81, 0x8C9E1430, 0xFF7CFFC4, 0xFF1A0006, 0xFF6E0A1E, 0xFFC7213F),
+        glass("glass_ocean", "Ocean Glass", 0xFFFFFFFF, 0xFFBFF4FF, 0xFF4FD1FF, 0x8C0E6A9E, 0xFF7CFFC4, 0xFF001A2E, 0xFF045A8D, 0xFF1AA6C9),
+        glass("glass_gold", "Champagne Glass", 0xFF3A2A10, 0xFF8A6214, 0xFFC99A3E, 0x8CB78A3A, 0xFF16865A, 0xFFFFF4DF, 0xFFEFD3A0, 0xFFC9A061),
         ThemePreset("midnight", "Midnight Purple", ThemeColors(c(0xFFB266FF), c(0xFF7A3DCC), c(0xFF000000), c(0xFF16121C), c(0xFFEDE7F6), c(0xFF1E1A26), c(0xFF4A2380), c(0xFF39FF88))),
         ThemePreset("neon", "Neon Green", ThemeColors(c(0xFF39FF14), c(0xFF1FAA59), c(0xFF000000), c(0xFF0F1A10), c(0xFFE8FFE8), c(0xFF132015), c(0xFF1E5C1A), c(0xFF39FF14))),
         ThemePreset("cyber", "Cyber Blue", ThemeColors(c(0xFF00B3FF), c(0xFF3D5AFE), c(0xFF000000), c(0xFF0D1520), c(0xFFE3F2FD), c(0xFF111C2A), c(0xFF0D3C73), c(0xFF00E5FF))),
@@ -72,7 +114,7 @@ object ThemePresets {
         ThemePreset("g_navy", "Midnight Navy", ThemeColors(c(0xFF64B5F6), c(0xFF26C6DA), c(0xFF020B1F), c(0x3364B5F6), c(0xFFE3F2FD), c(0x40FFFFFF), c(0xCC1E4E8C), c(0xFF5CFFB0)), listOf(c(0xFF01040F), c(0xFF0A1E44), c(0xFF17407A))),
     )
     const val CUSTOM_ID = "custom"
-    val default = all.first()
+    val default = all.first()   // Rose Glass
     fun byId(id: String) = all.firstOrNull { it.id == id }
 }
 
@@ -97,6 +139,10 @@ data class Settings(
     val buttonGradient: Boolean = false,
     /** In-call loudness multiplier (1 = normal, up to 3). */
     val callBoost: Float = 1.6f,
+    /** Liquid-glass panels, buttons and bubbles on every theme. */
+    val liquidGlass: Boolean = true,
+    val iconPack: IconPack = IconPack.MATCH,
+    val appIcon: AppIcon = AppIcon.CLASSIC,
     /** Last app version whose "What's new" screen was shown. */
     val seenVersion: Int = 0,
     /** Send my newer app to my friend's watch over Bluetooth automatically. */
@@ -115,6 +161,9 @@ data class Settings(
 ) {
     val gradient: List<Int>?
         get() = if (themeId == ThemePresets.CUSTOM_ID) null else ThemePresets.byId(themeId)?.gradient
+    /** Theme draws liquid "waves" behind the glass. */
+    val glassBackground: Boolean
+        get() = themeId != ThemePresets.CUSTOM_ID && ThemePresets.byId(themeId)?.glass == true
     val colors: ThemeColors
         get() = if (themeId == ThemePresets.CUSTOM_ID) custom else (ThemePresets.byId(themeId) ?: ThemePresets.default).colors
 }
@@ -160,7 +209,16 @@ class SettingsStore(context: Context) {
             heightCm = prefs.getInt("height", d.heightCm),
             walkSpeed = prefs.getFloat("walk_speed", d.walkSpeed),
             rangeAlert = prefs.getBoolean("range_alert", d.rangeAlert),
-        )
+            liquidGlass = prefs.getBoolean("glass", d.liquidGlass),
+            iconPack = runCatching { IconPack.valueOf(prefs.getString("icon_pack", d.iconPack.name)!!) }.getOrDefault(d.iconPack),
+            appIcon = runCatching { AppIcon.valueOf(prefs.getString("app_icon", d.appIcon.name)!!) }.getOrDefault(d.appIcon),
+        ).let { s ->
+            // V7: liquid glass is the default look. Anyone still on the old default theme moves to Rose Glass once.
+            if (!prefs.getBoolean("glass_migrated", false)) {
+                prefs.edit().putBoolean("glass_migrated", true).apply()
+                if (s.themeId == "midnight") s.copy(themeId = ThemePresets.default.id) else s
+            } else s
+        }
     }
 
     fun update(transform: (Settings) -> Settings) {
@@ -186,6 +244,7 @@ class SettingsStore(context: Context) {
             .putBoolean("upd_github", s.githubUpdates).putLong("upd_gh_last", s.lastGithubCheck)
             .putInt("height", s.heightCm).putFloat("walk_speed", s.walkSpeed)
             .putBoolean("range_alert", s.rangeAlert)
+            .putBoolean("glass", s.liquidGlass).putString("icon_pack", s.iconPack.name).putString("app_icon", s.appIcon.name)
             .apply()
         _state.value = s
     }

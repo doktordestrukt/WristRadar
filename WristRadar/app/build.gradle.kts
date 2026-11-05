@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 6
-val wrVersionName = "6.0.0"
-val wrReleaseLabel = "V6"
+val wrVersionCode = 7
+val wrVersionName = "7.0.0"
+val wrReleaseLabel = "V7"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.

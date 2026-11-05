@@ -101,8 +101,11 @@ fun WristRadarTheme(settings: Settings, content: @Composable () -> Unit) {
         CompositionLocalProvider(
             LocalPalette provides p, LocalAnimation provides settings.animations,
             LocalButtonStyle provides WrButtonStyle(settings.buttonShape.shape(), settings.buttonGradient),
+            LocalGlass provides GlassStyle(settings.liquidGlass, settings.iconPack),
         ) {
             Box(Modifier.fillMaxSize().let { if (bg != null) it.background(bg) else it.background(p.background) }) {
+                val g = settings.gradient
+                if (settings.glassBackground && g != null) LiquidBackground(g.map { Color(it) })
                 content()
                 if (settings.brightness < 0.99f) {
                     // Interface dimming overlay (does not intercept touches).

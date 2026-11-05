@@ -1,5 +1,9 @@
 package com.wristradar.ui.screens
 
+import androidx.compose.material.icons.filled.Favorite
+
+import androidx.compose.runtime.CompositionLocalProvider
+
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -88,7 +92,11 @@ fun WrToggle(label: String, checked: Boolean, secondary: String? = null, onChang
         label = { Text(label) },
         secondaryLabel = secondary?.let { { Text(it, fontSize = 11.sp) } },
         toggleControl = { Switch(checked = checked, enabled = true) },
-        colors = ToggleChipDefaults.toggleChipColors(
+        colors = if (com.wristradar.ui.theme.LocalGlass.current.on) ToggleChipDefaults.toggleChipColors(
+            checkedStartBackgroundColor = p.primary.copy(alpha = 0.38f), checkedEndBackgroundColor = Color.White.copy(alpha = 0.12f),
+            uncheckedStartBackgroundColor = Color.White.copy(alpha = 0.24f), uncheckedEndBackgroundColor = Color.White.copy(alpha = 0.10f),
+            checkedToggleControlColor = p.text, checkedContentColor = p.text, uncheckedContentColor = p.text,
+        ) else ToggleChipDefaults.toggleChipColors(
             checkedStartBackgroundColor = p.surface, checkedEndBackgroundColor = p.secondary.copy(alpha = 0.35f),
             uncheckedStartBackgroundColor = p.surface, uncheckedEndBackgroundColor = p.surface,
             checkedToggleControlColor = p.primary, checkedContentColor = p.text, uncheckedContentColor = p.text,
@@ -324,6 +332,21 @@ fun AppearanceScreen(nav: NavHostController) {
     val s by g.settings.state.collectAsState()
     WrScreen {
         item { SectionLabel("Appearance") }
+        item { SectionLabel("Liquid glass themes") }
+        ThemePresets.all.filter { it.glass }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
+        item { WrToggle("Liquid glass effect", s.liquidGlass, "Frosted glass buttons and bubbles on every theme") { v -> g.settings.update { it.copy(liquidGlass = v) } } }
+        item { SectionLabel("Icon pack") }
+        item { IconPackRow(s.iconPack) { pack -> g.settings.update { it.copy(iconPack = pack) } } }
+        item { SectionLabel("App icon") }
+        item {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val icons = com.wristradar.data.AppIcon.entries
+            WrChip("App icon", {
+                val next = icons[(icons.indexOf(s.appIcon) + 1) % icons.size]
+                if (AppIconSwitcher.set(ctx, next)) g.settings.update { it.copy(appIcon = next) }
+            }, secondary = s.appIcon.label + " (tap to change)")
+        }
+        item { Hint("The new app icon can take a moment to appear in the app list.") }
         item { SectionLabel("Style") }
         item {
             val fonts = com.wristradar.data.FontChoice.entries
@@ -337,7 +360,7 @@ fun AppearanceScreen(nav: NavHostController) {
         }
         item { WrToggle("Gradient buttons", s.buttonGradient, "Colour fade on every button") { v -> g.settings.update { it.copy(buttonGradient = v) } } }
         item { SectionLabel("Gradient themes") }
-        ThemePresets.all.filter { it.gradient != null }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
+        ThemePresets.all.filter { it.gradient != null && !it.glass }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
         item { SectionLabel("Dark themes") }
         ThemePresets.all.filter { it.gradient == null }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
         item {
@@ -364,6 +387,49 @@ fun AppearanceScreen(nav: NavHostController) {
             )
         }
         item { Hint("Dims WristRadar only. Black backgrounds save the most battery on AMOLED.") }
+    }
+}
+
+/** Swaps the launcher icon by enabling exactly one activity-alias. */
+object AppIconSwitcher {
+    fun set(ctx: android.content.Context, icon: com.wristradar.data.AppIcon): Boolean = runCatching {
+        val pm = ctx.packageManager
+        // Enable the new one first so there is never a moment with no launcher icon.
+        pm.setComponentEnabledSetting(
+            android.content.ComponentName(ctx.packageName, ctx.packageName + icon.alias),
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP,
+        )
+        com.wristradar.data.AppIcon.entries.filter { it != icon }.forEach {
+            pm.setComponentEnabledSetting(
+                android.content.ComponentName(ctx.packageName, ctx.packageName + it.alias),
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP,
+            )
+        }
+        true
+    }.getOrDefault(false)
+}
+
+/** Preview of every icon pack: tap one to use it. */
+@Composable
+private fun IconPackRow(current: com.wristradar.data.IconPack, onPick: (com.wristradar.data.IconPack) -> Unit) {
+    val p = LocalPalette.current
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        com.wristradar.data.IconPack.entries.chunked(4).forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                row.forEach { pack ->
+                    CompositionLocalProvider(com.wristradar.ui.theme.LocalGlass provides com.wristradar.ui.theme.GlassStyle(true, pack)) {
+                        Box(
+                            Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                .border(if (pack == current) 2.dp else 0.dp, if (pack == current) p.text else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                .clickable { onPick(pack) }.padding(3.dp)
+                        ) {
+                            com.wristradar.ui.theme.IconTile(30.dp) { Icon(Icons.Filled.Favorite, pack.label, modifier = Modifier.size(16.dp)) }
+                        }
+                    }
+                }
+            }
+        }
+        Text(current.label, fontSize = 11.sp, color = p.textDim)
     }
 }
 

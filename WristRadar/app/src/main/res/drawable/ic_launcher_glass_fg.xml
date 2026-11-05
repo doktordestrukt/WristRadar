@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Glass radar: white rings and sweep with a glossy highlight (original artwork). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#33FFFFFF" android:strokeColor="#CCFFFFFF" android:strokeWidth="1.5"
+        android:pathData="M30,30 h48 a10,10 0 0,1 10,10 v28 a10,10 0 0,1 -10,10 h-48 a10,10 0 0,1 -10,-10 v-28 a10,10 0 0,1 10,-10 z" />
+    <path android:fillColor="#40FFFFFF"
+        android:pathData="M30,30 h48 a10,10 0 0,1 10,10 v6 c-20,-6 -46,-6 -68,4 v-10 a10,10 0 0,1 10,-10 z" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.5" android:fillColor="#00000000"
+        android:pathData="M54,34 a20,20 0 1,0 0.01,0 z" />
+    <path android:strokeColor="#CCFFFFFF" android:strokeWidth="2" android:fillColor="#00000000"
+        android:pathData="M54,44 a10,10 0 1,0 0.01,0 z" />
+    <path android:fillColor="#66FFFFFF"
+        android:pathData="M54,54 L54,34 A20,20 0 0,1 71.3,44 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M64,46 a2.6,2.6 0 1,0 0.01,0 z" />
+</vector>
