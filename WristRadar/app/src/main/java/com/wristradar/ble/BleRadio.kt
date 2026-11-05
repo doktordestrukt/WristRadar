@@ -1,10 +1,14 @@
 package com.wristradar.ble
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.AdvertisingSet
+import android.bluetooth.le.AdvertisingSetCallback
+import android.bluetooth.le.AdvertisingSetParameters
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
@@ -12,24 +16,50 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.wristradar.data.RangeMode
 
-/** BLE advertising of the WristRadar service (connectable, no device name, no personal data). */
+/**
+ * BLE advertising of the WristRadar service (connectable, no device name in the legacy advert).
+ *
+ * Two advertisements can run at once:
+ *  - a legacy 1M advert (always): compatible with every watch, phone and the PC companion;
+ *  - in [RangeMode.MAX], an extra Bluetooth 5 extended advert on the LE Coded PHY ("long range",
+ *    roughly 2-4x the distance of 1M in open space) at maximum transmit power. It also carries the
+ *    display name, so nearby watches can show who you are without connecting first.
+ */
 @SuppressLint("MissingPermission")
 class BleAdvertiser(context: Context) {
     private val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
     private var callback: AdvertiseCallback? = null
     private var currentKey: String? = null
+    private var codedCallback: AdvertisingSetCallback? = null
+    private var codedKey: String? = null
 
     val supported: Boolean get() = adapter?.isMultipleAdvertisementSupported == true
 
-    fun update(payload: AdvertPayload, mode: Int, onResult: (Boolean, String?) -> Unit) {
-        val key = payload.encode().contentToString() + mode
+    /** Bluetooth 5 long-range (LE Coded PHY) extended advertising available on this watch. */
+    val longRangeSupported: Boolean
+        get() = runCatching { adapter?.isLeCodedPhySupported == true && adapter.isLeExtendedAdvertisingSupported }.getOrDefault(false)
+
+    fun update(payload: AdvertPayload, mode: Int, range: RangeMode, name: String?, onResult: (Boolean, String?) -> Unit) {
+        updateLegacy(payload, mode, range, onResult)
+        if (range == RangeMode.MAX && longRangeSupported) updateCoded(payload, name, onResult) else stopCoded()
+    }
+
+    private fun updateLegacy(payload: AdvertPayload, mode: Int, range: RangeMode, onResult: (Boolean, String?) -> Unit) {
+        val key = payload.encode().contentToString() + mode + range
         if (key == currentKey && callback != null) return
-        stop()
+        stopLegacy()
         val adv = adapter?.bluetoothLeAdvertiser ?: run { onResult(false, "Advertising not available"); return }
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(mode)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setTxPowerLevel(
+                when (range) {
+                    RangeMode.MAX -> AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
+                    RangeMode.BALANCED -> AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
+                    RangeMode.STEALTH -> AdvertiseSettings.ADVERTISE_TX_POWER_ULTRA_LOW
+                }
+            )
             .setConnectable(true)
             .setTimeout(0)
             .build()
@@ -55,11 +85,54 @@ class BleAdvertiser(context: Context) {
             .onFailure { callback = null; currentKey = null; onResult(false, it.message) }
     }
 
-    fun stop() {
+    private fun updateCoded(payload: AdvertPayload, name: String?, onResult: (Boolean, String?) -> Unit) {
+        val body = payload.encodeWithName(name)
+        val key = body.contentToString()
+        if (key == codedKey && codedCallback != null) return
+        stopCoded()
+        val adv = adapter?.bluetoothLeAdvertiser ?: return
+        val params = AdvertisingSetParameters.Builder()
+            .setLegacyMode(false)
+            .setConnectable(true)
+            .setScannable(false)
+            .setPrimaryPhy(BluetoothDevice.PHY_LE_CODED)
+            .setSecondaryPhy(BluetoothDevice.PHY_LE_CODED)
+            .setInterval(AdvertisingSetParameters.INTERVAL_MEDIUM)
+            .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_MAX)
+            .build()
+        val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(false)
+            .addServiceUuid(BleIds.SERVICE_PARCEL)
+            .addServiceData(BleIds.SERVICE_PARCEL, body)
+            .build()
+        val cb = object : AdvertisingSetCallback() {
+            override fun onAdvertisingSetStarted(set: AdvertisingSet?, txPower: Int, status: Int) {
+                if (status != ADVERTISE_SUCCESS) {
+                    if (codedCallback === this) { codedCallback = null; codedKey = null }
+                    onResult(false, "Long-range advert failed ($status)")
+                }
+            }
+        }
+        codedCallback = cb
+        codedKey = key
+        runCatching { adv.startAdvertisingSet(params, data, null, null, null, cb) }
+            .onFailure { codedCallback = null; codedKey = null }
+    }
+
+    fun stop() { stopLegacy(); stopCoded() }
+
+    private fun stopLegacy() {
         val cb = callback ?: return
         callback = null
         currentKey = null
         runCatching { adapter?.bluetoothLeAdvertiser?.stopAdvertising(cb) }
+    }
+
+    private fun stopCoded() {
+        val cb = codedCallback ?: return
+        codedCallback = null
+        codedKey = null
+        runCatching { adapter?.bluetoothLeAdvertiser?.stopAdvertisingSet(cb) }
     }
 
     private fun advertiseError(code: Int) = when (code) {
@@ -74,7 +147,8 @@ class BleAdvertiser(context: Context) {
 /**
  * Filtered scanning for the WristRadar service UUID. A hardware filter is required for scans to
  * continue while the screen is off. Android allows at most 5 scan starts per 30 s per app, so
- * starts are rate-limited here.
+ * starts are rate-limited here. Where supported, scanning also listens on the long-range (Coded)
+ * PHY so Max Range adverts from far away are heard.
  */
 @SuppressLint("MissingPermission")
 class BleScanner(context: Context, private val onResult: (ScanResult) -> Unit, private val onError: (Int) -> Unit) {
@@ -86,6 +160,9 @@ class BleScanner(context: Context, private val onResult: (ScanResult) -> Unit, p
     private var callback: ScanCallback? = null
 
     val running: Boolean get() = activeMode != null
+
+    private val extended: Boolean
+        get() = runCatching { adapter?.isLeExtendedAdvertisingSupported == true }.getOrDefault(false)
 
     fun start(mode: Int) {
         wantedMode = mode
@@ -109,13 +186,13 @@ class BleScanner(context: Context, private val onResult: (ScanResult) -> Unit, p
             }
         }
         val filters = listOf(ScanFilter.Builder().setServiceUuid(BleIds.SERVICE_PARCEL).build())
-        val settings = ScanSettings.Builder()
+        val builder = ScanSettings.Builder()
             .setScanMode(mode)
             .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
             .setReportDelay(0)
-            .build()
-        runCatching { scanner.startScan(filters, settings, cb) }.onSuccess {
+        if (extended) builder.setLegacy(false).setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)   // also hears Coded PHY
+        runCatching { scanner.startScan(filters, builder.build(), cb) }.onSuccess {
             callback = cb; activeMode = mode; starts.addLast(now)
         }
     }

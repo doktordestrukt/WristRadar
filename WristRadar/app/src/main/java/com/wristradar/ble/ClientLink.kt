@@ -15,7 +15,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /** GATT central side of a link. */
 @SuppressLint("MissingPermission")
-class ClientLink(private val context: Context, private val device: BluetoothDevice) :
+class ClientLink(private val context: Context, private val device: BluetoothDevice, private val longRange: Boolean = false) :
     Link(isClient = true, address = device.address) {
 
     private var gatt: BluetoothGatt? = null
@@ -28,7 +28,9 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
     override val deviceName: String? get() = runCatching { device.name }.getOrNull()
 
     suspend fun connect(timeoutMs: Long = 15_000): Boolean {
-        gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+        // Max Range: allow the connection on the Coded PHY too (it is created on whichever PHY the advert was heard).
+        val phy = BluetoothDevice.PHY_LE_1M_MASK or (if (longRange) BluetoothDevice.PHY_LE_CODED_MASK else 0)
+        gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE, phy)
         if (gatt == null) { markClosed(); return false }
         val ok = withTimeoutOrNull(timeoutMs) { ready.await() } ?: false
         if (!ok) close()
@@ -49,6 +51,24 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
         rssiWait = d
         if (!g.readRemoteRssi()) return@withLock null
         withTimeoutOrNull(2_000) { d.await() }
+    }
+
+    private var onCoded = false
+
+    /**
+     * Weak signal (far away) -> Coded PHY S2 (about double the range, half the speed);
+     * strong signal -> 1M/2M PHY for fast pictures and clear calls. Hysteresis avoids flapping.
+     */
+    fun adaptPhy(rssi: Int) {
+        if (!longRange) return
+        val g = gatt ?: return
+        if (!onCoded && rssi < -82) {
+            onCoded = true
+            runCatching { g.setPreferredPhy(BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_OPTION_S2) }
+        } else if (onCoded && rssi > -70) {
+            onCoded = false
+            runCatching { g.setPreferredPhy(BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_OPTION_NO_PREFERRED) }
+        }
     }
 
     fun setHighPriority(high: Boolean) {

@@ -115,6 +115,27 @@ class Notifier(private val ctx: Context, private val settings: SettingsStore) {
         )
     }
 
+    /** Notification that opens [intent] when tapped (used for app updates). */
+    @SuppressLint("MissingPermission")
+    fun showAction(title: String, text: String, intent: Intent) {
+        if (!canPost()) return
+        nm.notify(
+            UPDATE_ID,
+            NotificationCompat.Builder(ctx, CH_MSG).setSmallIcon(R.drawable.ic_stat_radar)
+                .setContentTitle(title).setContentText(text).setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(PendingIntent.getActivity(ctx, 78, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+                .build()
+        )
+        vibrate(longArrayOf(0, 60, 60, 60))
+    }
+
+    /** Partner nudged me. */
+    fun nudge() {
+        val vm = ctx.getSystemService(VibratorManager::class.java) ?: return
+        runCatching { vm.defaultVibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 120, 80, 120, 80, 250), -1)) }
+    }
+
     /** Subtle haptic when a message lands while the chat is on screen. */
     fun tick() = vibrate(longArrayOf(0, 40))
 
@@ -197,6 +218,7 @@ class Notifier(private val ctx: Context, private val settings: SettingsStore) {
         const val SERVICE_ID = 1001
         const val MSG_ID = 2001
         const val INFO_ID = 2002
+        const val UPDATE_ID = 2005
         const val BLACKBOX_ID = 2666
         const val CALL_ID = 2700
         const val CH_BLACKBOX = "wr_blackbox"

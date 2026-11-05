@@ -58,7 +58,7 @@ class HandshakeClient(
                         sendKey = Crypto.hkdf(ikm, th, "wr c2s"),
                         recvKey = Crypto.hkdf(ikm, th, "wr s2c"),
                     )
-                    Crypto.wipe(ikm); Crypto.wipe(eph)
+                    Crypto.wipe(ikm); Crypto.wipe(eph); Crypto.wipe(hsKey)
                     fin to keys
                 }
             }
@@ -114,7 +114,7 @@ class HandshakeServer(
             sendKey = Crypto.hkdf(k, th, "wr s2c"),
             recvKey = Crypto.hkdf(k, th, "wr c2s"),
         )
-        Crypto.wipe(k); ikm = null
+        Crypto.wipe(k); Crypto.wipe(hk); ikm = null; hsKey = null; t2 = null
         return keys
     }
 }

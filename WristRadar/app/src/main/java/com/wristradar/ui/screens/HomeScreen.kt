@@ -78,7 +78,7 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                     color = p.primary,
                 )
                 Spacer(Modifier.width(3.dp))
-                Text("V1", style = WrType.label.copy(fontSize = 8.sp), color = p.textDim)
+                Text(com.wristradar.BuildConfig.RELEASE_LABEL, style = WrType.label.copy(fontSize = 8.sp), color = p.textDim)
             }
         }
         item {
@@ -124,6 +124,11 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                 )
             }
             item {
+                WrChip("Walk to ${partnerName ?: "partner"}", { nav.navigate("walk") },
+                    secondary = "Steps, distance & time",
+                    icon = { Text("🚶", fontSize = 16.sp) })
+            }
+            item {
                 WrChip(
                     "Refresh connection", { g.engine.refresh() },
                     secondary = conn.detail.ifBlank { null },
@@ -144,6 +149,29 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
         item {
             val bat = g.battery.percent()
             Hint("Watch battery ${bat?.let { "$it%" } ?: "--"}")
+        }
+        item {
+            Text(
+                "Disclaimer", fontSize = 10.sp, color = p.textDim,
+                modifier = Modifier.clickable { nav.navigate("disclaimer") }.padding(6.dp),
+            )
+        }
+    }
+}
+
+/** The owner's disclaimer, linked from the bottom of the home screen. */
+@Composable
+fun DisclaimerScreen() {
+    val p = LocalPalette.current
+    com.wristradar.ui.components.WrScreen {
+        item { com.wristradar.ui.components.SectionLabel("Disclaimer") }
+        item {
+            Text(
+                "I do not claim responsibility for anything you say using this app, including inappropriate words.\n\n" +
+                    "Only the people I have personally given this APK to - just me and one other person - are allowed to use it.\n\n" +
+                    "If you share this APK, I will report you and you will not be allowed to use it.",
+                fontSize = 12.sp, color = p.text, textAlign = TextAlign.Center,
+            )
         }
     }
 }

@@ -89,7 +89,7 @@ public sealed class MainForm : Form
     void BuildLeft()
     {
         var title = new Label { Text = "WRISTRADAR", Font = Theme.Title, ForeColor = Theme.Primary, Dock = DockStyle.Top, Height = 40 };
-        var sub = new Label { Text = "PC COMPANION · V1", Font = new Font("Consolas", 8f), ForeColor = Theme.Dim, Dock = DockStyle.Top, Height = 22 };
+        var sub = new Label { Text = "PC COMPANION · V2", Font = new Font("Consolas", 8f), ForeColor = Theme.Dim, Dock = DockStyle.Top, Height = 22 };
         _profile.Paint += PaintProfile;
         _profile.Cursor = Cursors.Hand;
         _profile.Click += (_, _) => PickAvatar();
@@ -193,6 +193,7 @@ public sealed class MainForm : Form
         var pn = E.S.Trust?.PartnerName ?? "Partner";
         _chatHead.Text = !E.Paired ? "" : E.PartnerTyping ? $"{pn} is typing…" : E.Connected ? $"{pn} · Online" : $"{pn} · Last online {Rel.Ago(E.S.Trust?.PartnerLastSeen ?? 0)}";
         _chatHead.ForeColor = E.PartnerTyping ? Theme.Primary : E.Connected ? Theme.Good : Theme.Dim;
+        if (_chatPage.Visible && ContainsFocus) E.MarkSeenAndSend();   // partner's ticks turn blue
 
         // nearby list
         var items = E.Nearby.Values.OrderByDescending(n => n.Rssi).ToList();
@@ -231,6 +232,8 @@ public sealed class MainForm : Form
         List<Msg> msgs; lock (E.S.Messages) msgs = E.S.Messages.OrderBy(m => m.LocalTime).ToList();
         _chatEmpty.Visible = msgs.Count == 0;
         _chatEmpty.Text = E.Paired ? "No messages yet. Say hi 👋" : "Not paired. Go to Nearby watches to pair with your watch.";
+        var byId = msgs.ToDictionary(m => m.Id);
+        Bubble.QuoteLookup = id => byId.TryGetValue(id, out var q) ? (q.IsAudio ? "🎤 Voice message" : q.IsImage ? "📷 Photo" : q.Text.Length > 60 ? q.Text[..60] : q.Text) : null;
         bool added = false;
         _flow.SuspendLayout();
         foreach (var id in _bubbles.Keys.Where(k => msgs.All(m => m.Id != k)).ToList()) { _flow.Controls.Remove(_bubbles[id]); _bubbles[id].Dispose(); _bubbles.Remove(id); }

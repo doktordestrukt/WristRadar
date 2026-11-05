@@ -15,7 +15,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Colors
 import androidx.wear.compose.material.MaterialTheme
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.dp
+import androidx.wear.compose.material.Typography
 import com.wristradar.data.AnimationLevel
+import com.wristradar.data.ButtonShape
+import com.wristradar.data.FontChoice
 import com.wristradar.data.Settings
 import com.wristradar.data.ThemeColors
 
@@ -44,6 +51,25 @@ fun ThemeColors.toPalette() = WrPalette(
 val LocalPalette = staticCompositionLocalOf { com.wristradar.data.ThemePresets.default.colors.toPalette() }
 val LocalAnimation = staticCompositionLocalOf { AnimationLevel.FULL }
 
+/** User's button look: shape and whether every button gets a gradient fill. */
+data class WrButtonStyle(val shape: Shape, val gradient: Boolean)
+val LocalButtonStyle = staticCompositionLocalOf { WrButtonStyle(RoundedCornerShape(50), false) }
+
+fun FontChoice.family(): FontFamily = when (this) {
+    FontChoice.DEFAULT -> FontFamily.Default
+    FontChoice.ROUNDED -> FontFamily.SansSerif
+    FontChoice.SERIF -> FontFamily.Serif
+    FontChoice.MONO -> FontFamily.Monospace
+    FontChoice.CURSIVE -> FontFamily.Cursive
+    FontChoice.CONDENSED -> runCatching { FontFamily(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.NORMAL)) }.getOrDefault(FontFamily.SansSerif)
+}
+
+fun ButtonShape.shape(): Shape = when (this) {
+    ButtonShape.ROUND -> RoundedCornerShape(50)
+    ButtonShape.SOFT -> RoundedCornerShape(12.dp)
+    ButtonShape.SQUARE -> RoundedCornerShape(3.dp)
+}
+
 val Mono = FontFamily.Monospace
 
 object WrType {
@@ -70,9 +96,13 @@ fun WristRadarTheme(settings: Settings, content: @Composable () -> Unit) {
         onSurfaceVariant = p.textDim,
         onError = Color.Black,
     )
-    MaterialTheme(colors = colors) {
-        CompositionLocalProvider(LocalPalette provides p, LocalAnimation provides settings.animations) {
-            Box(Modifier.fillMaxSize().background(p.background)) {
+    val bg = settings.gradient?.takeIf { it.size >= 2 }?.let { g -> Brush.linearGradient(g.map { Color(it) }) }
+    MaterialTheme(colors = colors, typography = Typography(defaultFontFamily = settings.font.family())) {
+        CompositionLocalProvider(
+            LocalPalette provides p, LocalAnimation provides settings.animations,
+            LocalButtonStyle provides WrButtonStyle(settings.buttonShape.shape(), settings.buttonGradient),
+        ) {
+            Box(Modifier.fillMaxSize().let { if (bg != null) it.background(bg) else it.background(p.background) }) {
                 content()
                 if (settings.brightness < 0.99f) {
                     // Interface dimming overlay (does not intercept touches).

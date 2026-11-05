@@ -28,6 +28,44 @@ fun openMic(): AudioRecord? = runCatching {
     ).takeIf { it.state == AudioRecord.STATE_INITIALIZED }
 }.getOrNull()
 
+/**
+ * Turns on the watch's own voice clean-up on a microphone: echo cancelling (stops your friend
+ * hearing themselves), noise suppression and automatic gain. Missing effects are skipped.
+ */
+fun enableVoiceEffects(rec: AudioRecord): List<android.media.audiofx.AudioEffect> {
+    val id = rec.audioSessionId
+    val out = mutableListOf<android.media.audiofx.AudioEffect>()
+    if (android.media.audiofx.AcousticEchoCanceler.isAvailable())
+        runCatching { android.media.audiofx.AcousticEchoCanceler.create(id)?.apply { enabled = true }?.let(out::add) }
+    if (android.media.audiofx.NoiseSuppressor.isAvailable())
+        runCatching { android.media.audiofx.NoiseSuppressor.create(id)?.apply { enabled = true }?.let(out::add) }
+    if (android.media.audiofx.AutomaticGainControl.isAvailable())
+        runCatching { android.media.audiofx.AutomaticGainControl.create(id)?.apply { enabled = true }?.let(out::add) }
+    return out
+}
+
+/** Software gain with a soft limiter, so boosted audio gets louder without harsh clipping. */
+object Gain {
+    fun apply(pcm: ShortArray, n: Int, gain: Float) {
+        if (gain in 0.99f..1.01f) return
+        for (i in 0 until n) {
+            val x = pcm[i] * gain / 32768f
+            // tanh-style soft knee: linear for quiet speech, rounds off peaks
+            val y = if (x > 0.6f) 0.6f + 0.4f * kotlin.math.tanh((x - 0.6f) / 0.4f)
+                    else if (x < -0.6f) -0.6f - 0.4f * kotlin.math.tanh((-x - 0.6f) / 0.4f)
+                    else x
+            pcm[i] = (y * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+        }
+    }
+
+    /** Simple noise gate: very quiet frames (room hiss) are faded down. */
+    fun gate(pcm: ShortArray, n: Int, threshold: Int = 350) {
+        var peak = 0
+        for (i in 0 until n) { val a = abs(pcm[i].toInt()); if (a > peak) peak = a }
+        if (peak < threshold) for (i in 0 until n) pcm[i] = (pcm[i] / 4).toShort()
+    }
+}
+
 fun openSpeaker(streaming: Boolean, bytes: Int = 0): AudioTrack {
     val min = AudioTrack.getMinBufferSize(Adpcm.SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
     return AudioTrack.Builder()
@@ -58,6 +96,7 @@ class VoiceRecorder {
 
     fun start(onLimit: () -> Unit): Boolean {
         val rec = openMic() ?: return false
+        val fx = enableVoiceEffects(rec)
         running = true; count = 0
         thread = Thread {
             val chunk = ShortArray(Adpcm.CALL_FRAME)
@@ -65,12 +104,13 @@ class VoiceRecorder {
             while (running && count < buffer.size) {
                 val n = rec.read(chunk, 0, minOf(chunk.size, buffer.size - count))
                 if (n <= 0) continue
+                Gain.gate(chunk, n); Gain.apply(chunk, n, 1.5f)
                 System.arraycopy(chunk, 0, buffer, count, n)
                 count += n
                 _level.value = (chunk.take(n).maxOf { abs(it.toInt()) } / 32768f).coerceIn(0f, 1f)
                 _elapsed.value = count * 1000L / Adpcm.SAMPLE_RATE
             }
-            runCatching { rec.stop() }; rec.release()
+            runCatching { rec.stop() }; fx.forEach { runCatching { it.release() } }; rec.release()
             if (count >= buffer.size) onLimit()
         }.apply { name = "wr-voice-rec"; start() }
         return true

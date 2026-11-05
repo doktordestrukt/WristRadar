@@ -34,6 +34,7 @@ import com.wristradar.security.ThreatType
 import com.wristradar.crypto.SecureChannel
 import com.wristradar.crypto.SessionKeys
 import com.wristradar.data.ProfileStore
+import com.wristradar.data.RangeMode
 import com.wristradar.protocol.F
 import com.wristradar.protocol.In
 import com.wristradar.protocol.Out
@@ -79,6 +80,8 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
     val pairing = PairingController(g, this)
     val messenger = Messenger(g, this)
     val calls = com.wristradar.audio.CallManager(ctx, g, this)
+    val updater = Updater(ctx, g, this)
+    val walk = WalkTracker(ctx, g.settings)
 
     private val _presence = MutableStateFlow(Presence())
     val presence: StateFlow<Presence> = _presence.asStateFlow()
@@ -178,6 +181,8 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
     }
 
     fun start() = scope.launch {
+        updater.start()
+        walk.start()
         if (running) { applyRadio(); return@launch }
         if (!hasPermissions()) { setPhase(Phase.NO_PERMISSION, "Allow Nearby devices permission"); return@launch }
         val a = adapter ?: run { setPhase(Phase.UNSUPPORTED, "No Bluetooth adapter"); return@launch }
@@ -265,14 +270,22 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
             }
             tokenWindow = window
             val payload = AdvertPayload(discoveryActive, if (discoveryActive) myDiscoveryId else 0, token)
-            val mode = if (discoveryActive || t < boostUntil) AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
-            else AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
-            advertiser.update(payload, mode) { ok, err -> if (!ok) Log.w(TAG, "advertise: $err") }
+            val range = g.settings.current.range
+            val mode = when {
+                discoveryActive || t < boostUntil -> AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+                range == RangeMode.MAX -> AdvertiseSettings.ADVERTISE_MODE_BALANCED   // found faster from far away
+                else -> AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
+            }
+            advertiser.update(payload, mode, range, g.profile.myName.value) { ok, err -> if (!ok) Log.w(TAG, "advertise: $err") }
         } else advertiser.stop()
 
         val scanMode = when {
             discoveryActive -> ScanSettings.SCAN_MODE_LOW_LATENCY
-            partner != null && !connected -> if (t < boostUntil) ScanSettings.SCAN_MODE_LOW_LATENCY else ScanSettings.SCAN_MODE_LOW_POWER
+            partner != null && !connected -> when {
+                t < boostUntil -> ScanSettings.SCAN_MODE_LOW_LATENCY
+                g.settings.current.range == RangeMode.MAX -> ScanSettings.SCAN_MODE_BALANCED
+                else -> ScanSettings.SCAN_MODE_LOW_POWER
+            }
             else -> null
         }
         if (scanMode == null) scanner.stop() else scanner.start(scanMode)
@@ -289,6 +302,7 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
             e.device = r.device
             e.est.add(r.rssi)
             e.lastSeen = t
+            if (payload.name != null && e.name == null) e.name = payload.name   // long-range advert: name without connecting
             publishNearby()
             maybeFetchProfiles()
         }
@@ -396,18 +410,19 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
                 catch (e: Exception) { Log.w(TAG, "bad app message type=${m[0]}: ${e.javaClass.simpleName}") }
             }
         }
-        scope.launch { messenger.onSessionUp(s) }
+        scope.launch { updater.onSessionUp(s); messenger.onSessionUp(s) }
     }
 
     // =================================================================== links & frames
 
-    suspend fun openClientLink(device: BluetoothDevice): ClientLink? {
+    suspend fun openClientLink(device: BluetoothDevice, attempts: Int = 3, timeoutMs: Long = 15_000): ClientLink? {
         // Android BLE often fails a first connect with status 133; retry like the PC companion does.
-        repeat(3) { attempt ->
-            if (attempt > 0) delay(1_200)
-            val l = ClientLink(ctx, device)
+        val longRange = g.settings.current.range == RangeMode.MAX && advertiser.longRangeSupported
+        repeat(attempts) { attempt ->
+            if (attempt > 0) delay(800)
+            val l = ClientLink(ctx, device, longRange)
             attach(l)
-            if (l.connect()) return l
+            if (l.connect(timeoutMs)) return l
         }
         return null
     }
@@ -455,6 +470,8 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
                 if (plain == null) {
                     rejectedRecords++
                     Log.w(TAG, "rejected record #$rejectedRecords")
+                    val what = if (s.lastError == RecordError.REPLAY) "replay an old message" else "alter a message"
+                    scope.launch { messenger.insertAlert("⚠ Intercepted message blocked - someone tried to $what") }
                     if (s.lastError == RecordError.REPLAY) {
                         g.blackbox.report(ThreatType.REPLAYED_MESSAGE, "Record counter already used in this session", l)
                     } else {
@@ -508,6 +525,7 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
             session = null
             g.trust.markPartnerSeen()
             calls.onLinkLost()
+            updater.onSessionDown()
             typingJob?.cancel()
             _presence.update { it.copy(partnerTyping = false) }
             remoteBattery = null
@@ -552,6 +570,8 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
             lastStatusSent = t
             scope.launch {
                 val rssi = (s.link as? ClientLink)?.readRssi()
+                // Max Range: drop to the Coded PHY (long range) when the signal gets weak, back to fast PHY when close.
+                if (rssi != null && g.settings.current.range == RangeMode.MAX) (s.link as? ClientLink)?.adaptPhy(rssi)
                 if (rssi != null) { partnerEst.add(rssi); publishDistance() }
                 messenger.sendStatus(s, rssi)
                 messenger.retryTick(s)
@@ -559,6 +579,17 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
         } else if (s == null && t - partnerLastSeen > 20_000 && _conn.value.distanceM != null) {
             partnerEst.reset(); publishDistance()
         }
+    }
+
+    /** Bluetooth 5 long range (LE Coded PHY) available on this watch. */
+    val longRangeSupported: Boolean get() = advertiser.longRangeSupported
+
+    /** Saves the current partner signal as the "1 metre" reference. Returns the value or null. */
+    fun calibrateDistance(): Int? {
+        val r = partnerEst.smoothedRssi?.roundToInt() ?: return null
+        g.settings.update { it.copy(rssiAt1m = r) }
+        publishDistance()
+        return r
     }
 
     fun onRemoteStatus(battery: Int?, rssi: Int?) = scope.launch {
@@ -668,7 +699,7 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
         fetchingProfile = true
         scope.launch {
             try {
-                val link = openClientLink(e.device) ?: run { e.fetchFails++; return@launch }
+                val link = openClientLink(e.device, attempts = 2, timeoutMs = 7_000) ?: run { e.fetchFails++; return@launch }   // quick: profile peek
                 val resp = request(link, frame(F.PROFILE_REQ), setOf(F.PROFILE_RESP), 6_000)
                 link.close()
                 if (resp == null) { e.fetchFails++; return@launch }
@@ -695,12 +726,12 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
     private fun publishNearby() {
         _nearby.value = nearbyMap.values
             .sortedByDescending { it.est.smoothedRssi ?: -127.0 }
-            .map { NearbyUser(it.id, it.name, it.avatar, it.est.smoothedRssi?.roundToInt() ?: -127, it.est.distanceMetres(), it.lastSeen) }
+            .map { NearbyUser(it.id, it.name, it.avatar, it.est.smoothedRssi?.roundToInt() ?: -127, it.est.distanceMetres(g.settings.current.rssiAt1m), it.lastSeen) }
     }
 
     private fun publishDistance() {
         _conn.update {
-            it.copy(rssi = partnerEst.smoothedRssi?.roundToInt(), distanceM = partnerEst.distanceMetres(), remoteBattery = remoteBattery)
+            it.copy(rssi = partnerEst.smoothedRssi?.roundToInt(), distanceM = partnerEst.distanceMetres(g.settings.current.rssiAt1m), remoteBattery = remoteBattery)
         }
     }
 

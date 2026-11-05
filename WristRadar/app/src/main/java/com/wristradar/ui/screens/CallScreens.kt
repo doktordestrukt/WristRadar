@@ -129,8 +129,8 @@ fun CallScreen(nav: NavHostController) {
         ) {
             PulsingAvatar(ringing = st is CallState.Incoming || st is CallState.Outgoing, compact = st is CallState.Active)
             Text(name ?: "Partner", fontSize = 15.sp, maxLines = 1, fontWeight = FontWeight.SemiBold, color = p.text)
-            AnimatedContent(st::class, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "st") { _ ->
-                val s = st
+            AnimatedContent(st::class, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "st") { cls ->
+                val s = st.takeIf { it::class == cls } ?: st
                 Text(
                     when (s) {
                         CallState.Incoming -> "WristRadar call…"
@@ -161,6 +161,15 @@ fun CallScreen(nav: NavHostController) {
                             Icon(painterResource(R.drawable.ic_mic), if (s.muted) "Unmute" else "Mute")
                         }
                         EndButton { calls.hangUp() }
+                        // Volume boost: tap to cycle 1x -> 1.6x -> 2.2x -> 3x (makes your friend louder).
+                        val boost = g.settings.state.collectAsState().value.callBoost
+                        Button(onClick = {
+                            val steps = listOf(1f, 1.6f, 2.2f, 3f)
+                            calls.setBoost(steps.firstOrNull { it > boost + 0.05f } ?: steps.first())
+                        }, modifier = Modifier.size(40.dp),
+                            colors = ButtonDefaults.buttonColors(backgroundColor = if (boost > 1.05f) p.primary else p.surface, contentColor = if (boost > 1.05f) p.onColor(p.primary) else p.text)) {
+                            Text("🔊" + (if (boost > 1.05f) "×" + "%.1f".format(boost).trimEnd('0').trimEnd('.') else ""), fontSize = 10.sp, maxLines = 1)
+                        }
                     }
                     Spacer(Modifier.height(6.dp))
                     SwipeSlider("slide to hang up", p.danger, Icons.Filled.Call) { calls.hangUp() }

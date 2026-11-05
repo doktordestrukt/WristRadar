@@ -34,7 +34,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
             A.ACK -> {
                 val id = In(p).uuid().toString()
                 val e = g.messages.get(id)
-                if (e != null && e.outgoing && e.status != MsgStatus.DELIVERED) {
+                if (e != null && e.outgoing && e.status != MsgStatus.DELIVERED && e.status != MsgStatus.SEEN) {
                     g.messages.setProgress(id, 100, MsgStatus.DELIVERED)
                 }
                 lastAttempt.remove(id)
@@ -62,10 +62,76 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
             A.IMG_STATUS -> images.onStatus(p)
             A.IMG_FAIL -> images.onFail(p)
             A.UNPAIR -> engine.onRemoteUnpair()
+            A.SEEN -> {
+                val r = In(p)
+                val n = r.i().coerceIn(0, 200)
+                g.messages.markSeen(List(n) { r.uuid().toString() })
+            }
+            A.REACT -> {
+                val r = In(p); val id = r.uuid().toString(); val emoji = r.str(32).take(8)
+                if (g.messages.get(id) != null) g.messages.setReactTheirs(id, emoji.ifEmpty { null })
+            }
+            A.EDIT -> {
+                val r = In(p); val id = r.uuid().toString(); val text = r.str(4000).take(MAX_TEXT)
+                // Only the author may edit: the partner can only change messages they sent (incoming here).
+                val e = g.messages.get(id)
+                if (e != null && !e.outgoing && e.kind == MsgKind.TEXT && text.isNotBlank()) g.messages.setText(id, text)
+            }
+            A.DELETE -> {
+                val id = In(p).uuid().toString()
+                val e = g.messages.get(id)
+                if (e != null && !e.outgoing && e.kind != MsgKind.ALERT) g.messages.delete(id)
+            }
+            A.PIN -> {
+                val r = In(p); val id = r.uuid().toString(); val on = r.b().toInt() == 1
+                if (g.messages.get(id) != null) g.messages.setPinned(id, on)
+            }
+            A.VERSION, A.UPD_OFFER, A.UPD_REQ, A.UPD_CHUNK, A.UPD_ACK -> engine.updater.handle(session, type, p)
+            A.NUDGE -> {
+                g.notifier.nudge()
+                insertInfo("👋 ${g.profile.partnerName.value ?: "Your friend"} nudged you")
+                if (!g.uiVisibility.chatVisible) g.notifier.showInfo(g.profile.partnerName.value ?: "Your friend", "👋 Nudge!")
+            }
             A.TYPING -> engine.onPartnerTyping(In(p).b().toInt() == 1)
             A.CALL_INVITE, A.CALL_ACCEPT, A.CALL_DECLINE, A.CALL_END, A.CALL_AUDIO -> engine.calls.onSignal(type, p)
-            A.SECURITY_NOTICE -> g.blackbox.partnerNotice(In(p).str(300))
+            A.SECURITY_NOTICE -> {
+                val what = In(p).str(300)
+                g.blackbox.partnerNotice(what)
+                insertAlert("⚠ Your partner's watch blocked an intercepted message")
+            }
+            else -> {
+                // Sent by a newer WristRadar: tell the user once per kind instead of silently dropping it.
+                if (type >= 0x40 && unknownSeen.add(type)) {
+                    insertInfo("✨ ${g.profile.partnerName.value ?: "Your friend"} used a feature from a newer WristRadar. Update to see it.")
+                }
+            }
         }
+    }
+
+    private val unknownSeen = java.util.Collections.synchronizedSet(HashSet<Byte>())
+
+    /** Neutral note in the chat (not an alert). */
+    suspend fun insertInfo(text: String) {
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        g.messages.upsert(
+            MessageEntity(
+                id = id, outgoing = false, kind = MsgKind.INFO, bodyEnc = g.messages.encryptBody(id, text),
+                senderSeq = 0, sentAt = now, localTime = now, status = MsgStatus.RECEIVED, read = true,
+            )
+        )
+    }
+
+    private var lastNudge = 0L
+
+    /** Buzz the partner's watch (max once every 5 s). */
+    fun nudge(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastNudge < 5_000) return false
+        val s = engine.currentSession() ?: return false
+        lastNudge = now
+        engine.scope.launch { s.send(A.NUDGE); insertInfo("👋 You nudged ${g.profile.partnerName.value ?: "your friend"}") }
+        return true
     }
 
     private suspend fun onText(session: SecureSession, p: ByteArray) {
@@ -74,12 +140,13 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         val seq = r.l()
         val sentAt = r.l()
         val text = r.str(4000).take(MAX_TEXT)
+        val replyTo = if (r.hasMore()) runCatching { r.uuid().toString() }.getOrNull() else null
         val sid = id.toString()
         val entity = MessageEntity(
             id = sid, outgoing = false, kind = MsgKind.TEXT,
             bodyEnc = g.messages.encryptBody(sid, text), senderSeq = seq, sentAt = sentAt,
             localTime = System.currentTimeMillis(), status = MsgStatus.RECEIVED,
-            read = g.uiVisibility.chatVisible,
+            read = g.uiVisibility.chatVisible, replyTo = replyTo,
         )
         val isNew = g.messages.insertIgnore(entity)
         session.send(A.ACK, Out().uuid(id).build())          // ACK duplicates too
@@ -88,7 +155,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     private suspend fun onIncoming(e: MessageEntity, preview: String) {
         if (g.uiVisibility.chatVisible) {
-            g.messages.markAllRead()
+            sendSeen(g.messages.markAllRead())
             g.notifier.tick()
         } else {
             if (g.uiVisibility.appVisible) com.wristradar.ui.components.BannerBus.show(g.profile.partnerName.value ?: "Partner", if (g.settings.current.previews) preview else "New message")
@@ -98,7 +165,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     // ---------- sending ----------
 
-    suspend fun sendText(raw: String): Boolean {
+    suspend fun sendText(raw: String, replyTo: String? = null): Boolean {
         engine.lastActivity = System.currentTimeMillis()
         val text = raw.trim().take(MAX_TEXT)
         if (text.isEmpty() || g.trust.partner.value == null) return false
@@ -107,7 +174,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         val e = MessageEntity(
             id = id.toString(), outgoing = true, kind = MsgKind.TEXT,
             bodyEnc = g.messages.encryptBody(id.toString(), text), senderSeq = g.trust.nextSequence(),
-            sentAt = now, localTime = now, status = MsgStatus.PENDING,
+            sentAt = now, localTime = now, status = MsgStatus.PENDING, replyTo = replyTo,
         )
         g.messages.upsert(e)
         engine.currentSession()?.let { transmitText(it, e, text) }
@@ -147,6 +214,65 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         return true
     }
 
+    /** Tells the partner these incoming messages were seen (their ticks turn blue). */
+    fun sendSeen(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val s = engine.currentSession() ?: return
+        val out = Out().i(ids.size)
+        ids.take(200).forEach { out.uuid(UUID.fromString(it)) }
+        engine.scope.launch { s.send(A.SEEN, out.build()) }
+    }
+
+    /** Red in-chat notice for a message that was intercepted/tampered with and blocked. */
+    suspend fun insertAlert(text: String) {
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        g.messages.upsert(
+            MessageEntity(
+                id = id, outgoing = false, kind = MsgKind.ALERT, bodyEnc = g.messages.encryptBody(id, text),
+                senderSeq = 0, sentAt = now, localTime = now, status = MsgStatus.RECEIVED, read = true,
+            )
+        )
+    }
+
+    // ---------- reactions, edits, deletes, pins (queued until connected) ----------
+
+    private val pendingActions = java.util.concurrent.ConcurrentLinkedQueue<Pair<Byte, ByteArray>>()
+
+    private fun sendAction(type: Byte, payload: ByteArray) {
+        val s = engine.currentSession()
+        if (s == null) { pendingActions.add(type to payload); return }
+        engine.scope.launch { if (!s.send(type, payload)) pendingActions.add(type to payload) }
+    }
+
+    suspend fun react(id: String, emoji: String?) {
+        val e = g.messages.get(id) ?: return
+        val new = if (e.reactMine == emoji) null else emoji
+        g.messages.setReactMine(id, new)
+        sendAction(A.REACT, Out().uuid(UUID.fromString(id)).str(new ?: "").build())
+    }
+
+    suspend fun edit(id: String, raw: String) {
+        val e = g.messages.get(id) ?: return
+        val text = raw.trim().take(MAX_TEXT)
+        if (!e.outgoing || e.kind != MsgKind.TEXT || text.isEmpty()) return
+        g.messages.setText(id, text)
+        sendAction(A.EDIT, Out().uuid(UUID.fromString(id)).str(text).build())
+    }
+
+    /** Deletes a message here; my own messages are deleted on both watches. */
+    suspend fun deleteForBoth(id: String) {
+        val e = g.messages.get(id) ?: return
+        g.messages.delete(id)
+        if (e.outgoing) sendAction(A.DELETE, Out().uuid(UUID.fromString(id)).build())
+    }
+
+    suspend fun togglePin(id: String) {
+        val e = g.messages.get(id) ?: return
+        g.messages.setPinned(id, !e.pinned)
+        sendAction(A.PIN, Out().uuid(UUID.fromString(id)).b(if (!e.pinned) 1 else 0).build())
+    }
+
     fun sendTyping(typing: Boolean) {
         val s = engine.currentSession() ?: return
         engine.scope.launch { s.send(A.TYPING, byteArrayOf(if (typing) 1 else 0)) }
@@ -165,7 +291,9 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     private suspend fun transmitText(s: SecureSession, e: MessageEntity, text: String) {
         lastAttempt[e.id] = System.currentTimeMillis()
-        s.send(A.TEXT, Out().uuid(UUID.fromString(e.id)).l(e.senderSeq).l(e.sentAt).str(text).build())
+        val out = Out().uuid(UUID.fromString(e.id)).l(e.senderSeq).l(e.sentAt).str(text)
+        e.replyTo?.let { runCatching { out.uuid(UUID.fromString(it)) } }
+        s.send(A.TEXT, out.build())
     }
 
     /** Sends queued images one at a time in the background. */
@@ -196,6 +324,8 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
     // ---------- session lifecycle ----------
 
     suspend fun onSessionUp(s: SecureSession) {
+        sendSeen(g.messages.recentReadIncomingIds())
+        while (true) { val (t, pl) = pendingActions.poll() ?: break; s.send(t, pl) }
         sendProfile(s)
         sendStatus(s, null)
         val pending = g.messages.unacknowledged()

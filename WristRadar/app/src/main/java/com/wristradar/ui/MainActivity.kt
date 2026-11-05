@@ -135,6 +135,10 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
             callState is com.wristradar.audio.CallState.Active
         if (live && nav.currentDestination?.route != "call") nav.navigate("call") { launchSingleTop = true }
     }
+    // Announce each new version once, right after it is installed.
+    LaunchedEffect(Unit) {
+        if (g.settings.current.seenVersion < com.wristradar.BuildConfig.VERSION_CODE) nav.navigate("whatsnew") { launchSingleTop = true }
+    }
     LaunchedEffect(pairing) {
         if (pairing is PairingState.Incoming) {
             val r = nav.currentDestination?.route
@@ -165,6 +169,13 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("privacy") { PrivacyScreen() }
         composable("connection") { ConnectionInfoScreen() }
         composable("about") { AboutScreen() }
+        composable("msg/{id}") { com.wristradar.ui.screens.MessageActionsScreen(nav, it.arguments?.getString("id") ?: "") }
+        composable("pinned") { com.wristradar.ui.screens.PinnedScreen(nav) }
+        composable("search") { com.wristradar.ui.screens.SearchScreen(nav) }
+        composable("updates") { com.wristradar.ui.screens.UpdatesScreen() }
+        composable("walk") { com.wristradar.ui.screens.WalkScreen() }
+        composable("whatsnew") { com.wristradar.ui.screens.WhatsNewScreen(nav) }
+        composable("disclaimer") { com.wristradar.ui.screens.DisclaimerScreen() }
         composable("blackbox") { BlackboxSettingsScreen(nav) }
         composable("securitylog") { SecurityLogScreen() }
         composable("call") { com.wristradar.ui.screens.CallScreen(nav) }

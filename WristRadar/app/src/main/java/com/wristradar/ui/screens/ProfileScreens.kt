@@ -167,8 +167,21 @@ private fun galleryIntents(ctx: android.content.Context): List<Intent> {
         Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE),
         Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*"),
     )
-    return candidates.filter { it.resolveActivity(pm) != null }
+    // Pin each intent to a specific on-watch gallery (Samsung Gallery first) and never Google
+    // Photos, which shows the account's cloud library instead of pictures on the watch.
+    val out = ArrayList<Intent>()
+    for (base in candidates) {
+        val handlers = runCatching { pm.queryIntentActivities(base, 0) }.getOrDefault(emptyList())
+            .filter { it.activityInfo.packageName !in BlockedPickers }
+            .sortedBy { if (it.activityInfo.packageName == SamsungGallery) 0 else 1 }
+        val h = handlers.firstOrNull() ?: continue
+        out += Intent(base).setClassName(h.activityInfo.packageName, h.activityInfo.name)
+    }
+    return out
 }
+
+private const val SamsungGallery = "com.samsung.android.gallery.watch"
+private val BlockedPickers = setOf("com.google.android.apps.photos")
 
 /**
  * Opens the person's gallery app automatically. If the watch has no gallery app, it falls back to

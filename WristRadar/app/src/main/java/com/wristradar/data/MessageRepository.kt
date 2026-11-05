@@ -28,7 +28,15 @@ data class ChatMessage(
     val height: Int,
     val read: Boolean,
     val isAudio: Boolean = false,
+    val isAlert: Boolean = false,
     val durationMs: Int = 0,
+    val reactMine: String? = null,
+    val reactTheirs: String? = null,
+    val replyTo: String? = null,
+    val edited: Boolean = false,
+    val pinned: Boolean = false,
+    /** Neutral system note (nudges, "update to see this"). */
+    val isInfo: Boolean = false,
 )
 
 class MessageRepository(
@@ -50,10 +58,11 @@ class MessageRepository(
     val unread: Flow<Int> = dao.observeUnread()
 
     private fun MessageEntity.toChat() = ChatMessage(
-        id, outgoing, kind != MsgKind.TEXT,
+        id, outgoing, kind == MsgKind.IMAGE || kind == MsgKind.AUDIO,
         bodyEnc?.let { decryptBody(id, it) } ?: "",
         sentAt, localTime, status, progress, width, height, read,
-        kind == MsgKind.AUDIO, durationMs,
+        kind == MsgKind.AUDIO, kind == MsgKind.ALERT, durationMs,
+        reactMine, reactTheirs, replyTo, edited, pinned, kind == MsgKind.INFO,
     )
 
     fun encryptBody(id: String, text: String): ByteArray = vault.encrypt(text.toByteArray(), "msg:$id")
@@ -64,8 +73,16 @@ class MessageRepository(
     suspend fun setStatus(id: String, status: Int) = dao.setStatus(id, status)
     suspend fun setProgress(id: String, p: Int, status: Int) = dao.setProgress(id, p, status)
     suspend fun unacknowledged() = dao.unacknowledgedOutgoing()
-    suspend fun markAllRead() = dao.markAllRead()
+    /** Marks everything read and returns the ids that were unread (to send "seen" receipts). */
+    suspend fun markAllRead(): List<String> { val ids = dao.unreadIncomingIds(); dao.markAllRead(); return ids }
+    suspend fun recentReadIncomingIds() = dao.recentReadIncomingIds()
+    suspend fun markSeen(ids: List<String>) { if (ids.isNotEmpty()) dao.markSeen(ids) }
     suspend fun unreadCount() = dao.unreadCount()
+    suspend fun delete(id: String) = withContext(Dispatchers.IO) { dao.delete(id); imageFile(id).delete(); bitmapCache.remove(id) }
+    suspend fun setReactMine(id: String, e: String?) = dao.setReactMine(id, e)
+    suspend fun setReactTheirs(id: String, e: String?) = dao.setReactTheirs(id, e)
+    suspend fun setText(id: String, text: String) = dao.setBody(id, encryptBody(id, text))
+    suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)
     suspend fun latestUnread(): List<ChatMessage> = dao.latestUnread().map { it.toChat() }
 
     fun textOf(e: MessageEntity): String =

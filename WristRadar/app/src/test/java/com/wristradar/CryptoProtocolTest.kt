@@ -176,7 +176,7 @@ class CryptoProtocolTest {
         assertEquals("≈ 4 ft", DistanceEstimator.format(1.2, DistanceUnit.FEET))
         assertEquals("≈ 20 m", DistanceEstimator.format(19.0, DistanceUnit.METRES))
         val est = DistanceEstimator()
-        repeat(30) { est.add(-62) }
+        repeat(30) { est.add(-71) }
         assertEquals(1.0, est.distanceMetres()!!, 0.05)
         est.add(-90)   // single spike is smoothed
         assertTrue(est.distanceMetres()!! < 3.0)

@@ -129,7 +129,7 @@ public sealed class TrustData
     public long Seq { get; set; }
 }
 
-public static class MsgStatus { public const int Pending = 0, Delivered = 1, Received = 2, Transferring = 3, Failed = 4; }
+public static class MsgStatus { public const int Pending = 0, Delivered = 1, Received = 2, Transferring = 3, Failed = 4, Seen = 5; }
 
 public sealed class Msg
 {
@@ -138,6 +138,8 @@ public sealed class Msg
     public bool IsImage { get; set; }
     public bool IsAudio { get; set; }
     public int DurationMs { get; set; }
+    public bool IsAlert { get; set; }
+    public bool SeenSent { get; set; }
     public string Text { get; set; } = "";
     public long Seq { get; set; }
     public long SentAt { get; set; }
@@ -146,6 +148,11 @@ public sealed class Msg
     public int Progress { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
+    public string? ReactMine { get; set; }
+    public string? ReactTheirs { get; set; }
+    public string? ReplyTo { get; set; }
+    public bool Edited { get; set; }
+    public bool Pinned { get; set; }
 }
 
 public sealed class SecurityEvent

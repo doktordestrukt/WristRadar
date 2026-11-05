@@ -98,12 +98,12 @@ public sealed class BleLink : IDisposable
                 var frag = new byte[n + 1];
                 frag[0] = (byte)((first ? 0x80 : 0) | (last ? 0x40 : 0));
                 Buffer.BlockCopy(frame, off, frag, 1, n);
+                // No retries: a write that "failed" may still have reached the watch, and resending it
+                // duplicates a fragment, which corrupts the record and raised false TAMPERED alerts.
+                // A failed write drops the link instead; the app reconnects and re-sends whole messages.
                 GattWriteResult? r = null;
-                for (int attempt = 0; attempt < 3 && r?.Status != GattCommunicationStatus.Success; attempt++)
-                {
-                    try { r = await _rx.WriteValueWithResultAsync(CryptographicBuffer.CreateFromByteArray(frag), GattWriteOption.WriteWithResponse); }
-                    catch { r = null; await Task.Delay(40 * (attempt + 1)); }
-                }
+                try { r = await _rx.WriteValueWithResultAsync(CryptographicBuffer.CreateFromByteArray(frag), GattWriteOption.WriteWithResponse); }
+                catch { r = null; }
                 if (r?.Status != GattCommunicationStatus.Success) { Dispose(); return false; }
                 off += n; first = false;
             } while (off < frame.Length);
@@ -140,12 +140,12 @@ public sealed class BleLink : IDisposable
     }
 }
 
-public sealed record AdvertSeen(ulong Address, BluetoothAddressType AddressType, short Rssi, bool Discoverable, int DiscoveryId, byte[] Token);
+public sealed record AdvertSeen(ulong Address, BluetoothAddressType AddressType, short Rssi, bool Discoverable, int DiscoveryId, byte[] Token, string? Name = null);
 
 /// <summary>Active BLE scanning for the WristRadar service data in scan responses.</summary>
 public sealed class Scanner
 {
-    readonly BluetoothLEAdvertisementWatcher _w = new() { ScanningMode = BluetoothLEScanningMode.Active };
+    readonly BluetoothLEAdvertisementWatcher _w = new() { ScanningMode = BluetoothLEScanningMode.Active, AllowExtendedAdvertisements = true };
     readonly byte[] _uuidLe = Advert.ServiceUuidLe();
     public event Action<AdvertSeen>? Seen;
     public bool Running => _w.Status == BluetoothLEAdvertisementWatcherStatus.Started;
@@ -165,7 +165,8 @@ public sealed class Scanner
             if (d == null || d.Length < 16 + 13 || !d.AsSpan(0, 16).SequenceEqual(_uuidLe)) continue;
             var p = d.AsSpan(16, 13).ToArray();
             int id = (p[1] << 24) | (p[2] << 16) | (p[3] << 8) | p[4];
-            Seen?.Invoke(new AdvertSeen(a.BluetoothAddress, a.BluetoothAddressType, a.RawSignalStrengthInDBm, (p[0] & 1) == 1, id, p[5..13]));
+            string? nm = d.Length > 29 ? System.Text.Encoding.UTF8.GetString(d, 29, d.Length - 29).Trim() : null;   // name from long-range adverts
+            Seen?.Invoke(new AdvertSeen(a.BluetoothAddress, a.BluetoothAddressType, a.RawSignalStrengthInDBm, (p[0] & 1) == 1, id, p[5..13], string.IsNullOrWhiteSpace(nm) ? null : nm));
         }
     }
 }

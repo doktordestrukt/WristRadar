@@ -36,12 +36,31 @@ object A {
     const val UNPAIR: Byte = 0x47
     const val IMG_FAIL: Byte = 0x49
     const val TYPING: Byte = 0x4A
+    /** Read receipt: count int + message UUIDs the reader has seen. */
+    const val SEEN: Byte = 0x4B
+    /** Reaction: target uuid + emoji string ("" removes it). */
+    const val REACT: Byte = 0x4C
+    /** Edit own message: target uuid + new text. */
+    const val EDIT: Byte = 0x4D
+    /** Delete own message for both: target uuid. */
+    const val DELETE: Byte = 0x4E
+    /** Pin/unpin for both: target uuid + byte (1 = pinned). */
+    const val PIN: Byte = 0x4F
     const val CALL_INVITE: Byte = 0x50
     const val CALL_ACCEPT: Byte = 0x51
     const val CALL_DECLINE: Byte = 0x52
     const val CALL_END: Byte = 0x53
     const val CALL_AUDIO: Byte = 0x54
     const val SECURITY_NOTICE: Byte = 0x55
+    /** App version: code int + label + platform byte (0 watch, 1 PC). Sent on every connect. */
+    const val VERSION: Byte = 0x56
+    /** Bluetooth app update: offer / request(offset) / chunk / ack. See Updater. */
+    const val UPD_OFFER: Byte = 0x57
+    const val UPD_REQ: Byte = 0x58
+    const val UPD_CHUNK: Byte = 0x59
+    const val UPD_ACK: Byte = 0x5A
+    /** Buzz the partner's watch. */
+    const val NUDGE: Byte = 0x5B
 }
 
 class Out {

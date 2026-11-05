@@ -191,10 +191,12 @@ class CallManager(private val ctx: Context, private val g: AppGraph, private val
         audioRunning = true
         inQueue = Channel(6, BufferOverflow.DROP_OLDEST)
         runCatching { am?.mode = AudioManager.MODE_IN_COMMUNICATION }
+        loudSpeakerOn()
         val id = callId ?: return
         // microphone -> ADPCM -> queue
         micThread = Thread {
             val rec = if (hasMicPermission(ctx)) openMic() else null
+            val fx = rec?.let { enableVoiceEffects(it) }.orEmpty()
             val frame = ShortArray(Adpcm.CALL_FRAME)
             val st = Adpcm.State()
             rec?.startRecording()
@@ -204,9 +206,10 @@ class CallManager(private val ctx: Context, private val g: AppGraph, private val
                 var got = 0
                 while (got < frame.size && audioRunning) { val n = rec.read(frame, got, frame.size - got); if (n <= 0) break; got += n }
                 if (!audioRunning || got < frame.size) continue
-                if (muted) frame.fill(0)
+                if (muted) frame.fill(0) else { Gain.gate(frame, frame.size); Gain.apply(frame, frame.size, MIC_GAIN) }
                 outQueue.trySend(Out().raw(id).i(seq++).raw(Adpcm.encodeBlock(frame, frame.size, st)).build())
             }
+            fx.forEach { runCatching { it.release() } }
             rec?.let { runCatching { it.stop() }; it.release() }
         }.apply { name = "wr-call-mic"; start() }
         // queue -> encrypted session
@@ -224,6 +227,7 @@ class CallManager(private val ctx: Context, private val g: AppGraph, private val
             while (audioRunning) {
                 val pcm = q.tryReceive().getOrNull()
                 if (pcm == null) { Thread.sleep(10); continue }
+                Gain.apply(pcm, pcm.size, g.settings.current.callBoost)
                 track.write(pcm, 0, pcm.size)
             }
             runCatching { track.stop() }; track.release()
@@ -235,8 +239,38 @@ class CallManager(private val ctx: Context, private val g: AppGraph, private val
         audioRunning = false
         sendJob?.cancel()
         while (outQueue.tryReceive().isSuccess) { /* drain */ }
+        loudSpeakerOff()
         runCatching { am?.mode = AudioManager.MODE_NORMAL }
     }
+
+    /** Volume boost from the call screen (1x..3x), applied live to your friend's voice. */
+    fun setBoost(v: Float) = g.settings.update { it.copy(callBoost = v.coerceIn(1f, 3f)) }
+
+    private var savedVolume = -1
+
+    /** Routes the call to the watch loudspeaker and turns call volume all the way up. */
+    private fun loudSpeakerOn() {
+        val a = am ?: return
+        runCatching {
+            savedVolume = a.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+            a.setStreamVolume(AudioManager.STREAM_VOICE_CALL, a.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL), 0)
+        }
+        runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                a.availableCommunicationDevices.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                    ?.let { a.setCommunicationDevice(it) }
+            } else @Suppress("DEPRECATION") { a.isSpeakerphoneOn = true }
+        }
+    }
+
+    private fun loudSpeakerOff() {
+        val a = am ?: return
+        runCatching { if (android.os.Build.VERSION.SDK_INT >= 31) a.clearCommunicationDevice() }
+        runCatching { if (savedVolume >= 0) a.setStreamVolume(AudioManager.STREAM_VOICE_CALL, savedVolume, 0) }
+        savedVolume = -1
+    }
+
+    companion object { private const val MIC_GAIN = 1.6f }
 
     private fun startRinging() {
         runCatching {

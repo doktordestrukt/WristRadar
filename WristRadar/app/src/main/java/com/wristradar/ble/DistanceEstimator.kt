@@ -9,8 +9,9 @@ import kotlin.math.roundToInt
  * This is an ESTIMATE. Bodies, walls, wrist orientation and interference easily move it by 2x.
  */
 class DistanceEstimator(
-    private val rssiAt1m: Double = -62.0,
-    private val pathLossExponent: Double = 2.3,
+    // Wrist-worn watches read ~8-10 dB weaker than phones at the same distance (body absorption).
+    private val rssiAt1m: Double = -71.0,
+    private val pathLossExponent: Double = 2.0,
     private val alpha: Double = 0.25,
 ) {
     var smoothedRssi: Double? = null; private set
@@ -24,7 +25,9 @@ class DistanceEstimator(
 
     fun reset() { smoothedRssi = null }
 
-    fun distanceMetres(): Double? = smoothedRssi?.let {
+    /** [calibrated] = signal measured at ~1 m on the user's own wrists (Settings > Calibrate distance). */
+    fun distanceMetres(calibrated: Int? = null): Double? = smoothedRssi?.let {
+        val rssiAt1m = calibrated?.toDouble() ?: rssiAt1m
         10.0.pow((rssiAt1m - it) / (10 * pathLossExponent)).coerceIn(0.3, 60.0)
     }
 

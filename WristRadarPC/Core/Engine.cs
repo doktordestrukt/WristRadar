@@ -131,6 +131,7 @@ public sealed partial class Engine
             if (!Nearby.TryGetValue(a.DiscoveryId, out var n)) Nearby[a.DiscoveryId] = n = new NearbyWatch { DiscoveryId = a.DiscoveryId, Rssi = a.Rssi };
             n.Address = a.Address; n.AddressType = a.AddressType; n.LastSeen = Now();
             n.Rssi += 0.25 * (a.Rssi - n.Rssi);
+            if (a.Name != null && n.Name == null) n.Name = Clean(a.Name);
             Notify();
             FetchProfiles();
         }
@@ -200,6 +201,7 @@ public sealed partial class Engine
                 var plain = _chan.Open(f[1..]);
                 if (plain == null)
                 {
+                    AddAlert("⚠ Intercepted message blocked - someone tried to " + (_chan.LastError == RecordError.Replay ? "replay an old message" : "alter a message"));
                     if (_chan.LastError == RecordError.Replay) Report("REPLAYED MESSAGE", "Replayed encrypted message rejected", l);
                     else Report("TAMPERED MESSAGE", "Modified encrypted message rejected (invalid authentication tag)", l);
                     return;
@@ -351,6 +353,7 @@ public sealed partial class Engine
 
     async Task OnSessionUp()
     {
+        await SendApp(A.Version, new Out().I(2).Str("V2").B(1).Build());   // platform 1 = PC: never sent watch APKs
         await SendProfile();
         await SendStatus();
         await RetryPending(force: true);
@@ -415,8 +418,10 @@ public sealed partial class Engine
                 var r = new In(p);
                 var id = Ids.ToStr(r.Raw(16)); var seq = r.L(); var sentAt = r.L(); var text = r.Str(4000);
                 if (text.Length > 1000) text = text[..1000];
+                string? replyTo = null;
+                if (r.HasMore) try { replyTo = Ids.ToStr(r.Raw(16)); } catch { }
                 bool isNew;
-                Msg m = new() { Id = id, Outgoing = false, Text = text, Seq = seq, SentAt = sentAt, LocalTime = Now(), Status = MsgStatus.Received };
+                Msg m = new() { Id = id, Outgoing = false, Text = text, Seq = seq, SentAt = sentAt, LocalTime = Now(), Status = MsgStatus.Received, ReplyTo = replyTo };
                 lock (S.Messages) { isNew = S.Messages.All(x => x.Id != id); if (isNew) S.Messages.Add(m); }
                 await SendApp(A.Ack, Ids.FromStr(id));
                 if (isNew) { S.SaveMessages(); Notify(); Incoming?.Invoke(m); }
@@ -425,7 +430,7 @@ public sealed partial class Engine
             case A.Ack:
             {
                 var id = Ids.ToStr(new In(p).Raw(16));
-                lock (S.Messages) foreach (var m in S.Messages.Where(x => x.Id == id && x.Outgoing)) { m.Status = MsgStatus.Delivered; m.Progress = 100; }
+                lock (S.Messages) foreach (var m in S.Messages.Where(x => x.Id == id && x.Outgoing && x.Status != MsgStatus.Seen)) { m.Status = MsgStatus.Delivered; m.Progress = 100; }
                 _lastAttempt.Remove(id);
                 S.SaveMessages(); Notify();
                 break;

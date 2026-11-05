@@ -104,6 +104,10 @@ public sealed class Bubble : Control
         if (m.IsImage) Cursor = Cursors.Hand;
     }
 
+    /// <summary>Reply-to quote is shown as a first line.</summary>
+    public static Func<string, string?>? QuoteLookup;
+    string DisplayText => M.ReplyTo == null ? M.Text : "↩ " + (QuoteLookup?.Invoke(M.ReplyTo) ?? "deleted message") + "\n" + M.Text;
+
     public void Update(Msg m) { M = m; if (m.IsImage && _img == null) _img = null; Relayout(); Invalidate(); }
 
     public void Relayout()
@@ -121,7 +125,7 @@ public sealed class Bubble : Control
             int w = 240; float ratio = M.Width > 0 && M.Height > 0 ? (float)M.Height / M.Width : 0.75f;
             return new Size(w, (int)Math.Clamp(w * ratio, 120, 320));
         }
-        var s = TextRenderer.MeasureText(M.Text, Font, new Size(MaxW, 4000), TextFormatFlags.WordBreak);
+        var s = TextRenderer.MeasureText(DisplayText, Font, new Size(MaxW, 4000), TextFormatFlags.WordBreak);
         return new Size(Math.Max(s.Width, 30), s.Height);
     }
 
@@ -129,6 +133,15 @@ public sealed class Bubble : Control
     {
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        if (M.IsAlert)
+        {
+            // Intercepted / tampered message that was blocked: red, centred.
+            var ts = TextRenderer.MeasureText(M.Text, Theme.Ui);
+            var ar = new RectangleF((Width - ts.Width) / 2f - 12, 2, ts.Width + 24, ts.Height + 12);
+            using (var ap = Theme.Round(ar, 10)) using (var ab = new SolidBrush(Color.FromArgb(220, Theme.Danger))) g.FillPath(ab, ap);
+            TextRenderer.DrawText(g, M.Text, Theme.Ui, Rectangle.Round(ar), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            return;
+        }
         var content = Measure();
         int bw = content.Width + Pad * 2, bh = content.Height + Pad * 2 - (M.IsImage ? 14 : 0);
         int x = M.Outgoing ? Width - bw - 4 : 4;
@@ -162,20 +175,23 @@ public sealed class Bubble : Control
         }
         else
         {
-            TextRenderer.DrawText(g, M.Text, Font, new Rectangle(x + Pad, Pad, content.Width + 2, content.Height + 4), Theme.Text, TextFormatFlags.WordBreak);
+            TextRenderer.DrawText(g, DisplayText, Font, new Rectangle(x + Pad, Pad, content.Width + 2, content.Height + 4), Theme.Text, TextFormatFlags.WordBreak);
         }
-        var time = DateTimeOffset.FromUnixTimeMilliseconds(M.LocalTime).ToLocalTime().ToString("HH:mm");
+        var time = (M.Pinned ? "📌 " : "") + DateTimeOffset.FromUnixTimeMilliseconds(M.LocalTime).ToLocalTime().ToString("HH:mm") + (M.Edited ? " · edited" : "");
+        var reacts = string.Join(" ", new[] { M.ReactTheirs, M.ReactMine }.Where(x => !string.IsNullOrEmpty(x)));
+        if (reacts.Length > 0) time = reacts + "  " + time;
         string status = !M.Outgoing ? "" : M.Status switch
         {
             MsgStatus.Pending => " · sending",
             MsgStatus.Transferring => $" · {M.Progress}%",
             MsgStatus.Delivered => " · ✓✓",
+            MsgStatus.Seen => " · ✓✓",
             MsgStatus.Failed => " · failed",
             _ => "",
         };
         var meta = time + status;
         var ms = TextRenderer.MeasureText(meta, Theme.UiSmall);
         int mx = M.Outgoing ? Width - ms.Width - 8 : 8;
-        TextRenderer.DrawText(g, meta, Theme.UiSmall, new Point(mx, (int)rect.Bottom + 1), M.Status == MsgStatus.Failed ? Theme.Danger : Theme.Dim);
+        TextRenderer.DrawText(g, meta, Theme.UiSmall, new Point(mx, (int)rect.Bottom + 1), M.Status == MsgStatus.Failed ? Theme.Danger : M.Status == MsgStatus.Seen ? Color.FromArgb(0x34, 0xA6, 0xFF) : Theme.Dim);
     }
 }

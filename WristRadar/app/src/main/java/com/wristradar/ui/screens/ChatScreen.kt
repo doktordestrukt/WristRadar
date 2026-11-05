@@ -7,6 +7,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -97,24 +100,46 @@ fun ChatScreen(nav: NavHostController) {
     val listState = rememberScalingLazyListState()
     val presence by g.engine.presence.collectAsState()
     val lastSeen by g.trust.partnerLastSeen.collectAsState()
-    val sendText = rememberTextInput(onClosed = { g.engine.messenger.sendTyping(false) }) { text -> scope.launch { g.engine.messenger.sendText(text) } }
+    val replyTarget = ChatReply.target
+    val partnerApp = g.engine.updater.state.collectAsState().value.partner
+    val sendText = rememberTextInput(onClosed = { g.engine.messenger.sendTyping(false) }) { text ->
+        val to = ChatReply.target?.id
+        ChatReply.target = null
+        scope.launch { g.engine.messenger.sendText(text, to) }
+    }
 
     DisposableEffect(Unit) {
         g.uiVisibility.chatVisible = true
         g.notifier.cancelMessages()
-        onDispose { g.uiVisibility.chatVisible = false }
+        onDispose {
+            g.uiVisibility.chatVisible = false
+            // Remember where the user was, so reopening the chat lands back there.
+            ChatScrollMemory.index = listState.centerItemIndex
+            ChatScrollMemory.offset = listState.centerItemScrollOffset
+        }
     }
 
     val list = messages
+    var restored by remember { mutableStateOf(false) }
     LaunchedEffect(list?.size) {
         if (list == null) return@LaunchedEffect
         if (!unreadComputed) {
-            firstUnreadId = list.firstOrNull { !it.outgoing && !it.read }?.id
+            firstUnreadId = list.firstOrNull { !it.outgoing && !it.read && !it.isAlert }?.id
             unreadComputed = true
         }
-        if (list.any { !it.read }) g.messages.markAllRead()
+        if (list.any { !it.read }) g.engine.messenger.sendSeen(g.messages.markAllRead())
         val lastIndex = listState.layoutInfo.totalItemsCount - 1
-        if (lastIndex > 0) {
+        if (lastIndex <= 0) return@LaunchedEffect
+        if (!restored) {
+            restored = true
+            val saved = ChatScrollMemory.index
+            if (saved in 0..lastIndex) { listState.scrollToItem(saved, ChatScrollMemory.offset); return@LaunchedEffect }
+            listState.scrollToItem(lastIndex)
+            return@LaunchedEffect
+        }
+        // New message while open: follow it only if the user is already near the bottom.
+        val nearBottom = listState.centerItemIndex >= lastIndex - 4 || list.lastOrNull()?.outgoing == true
+        if (nearBottom) {
             if (animsEnabled) listState.animateScrollToItem(lastIndex) else listState.scrollToItem(lastIndex)
         }
     }
@@ -148,7 +173,22 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
         if (partner == null) item { Hint("Not paired. Pair with a watch to chat.") }
+        if (partnerApp != null && partnerApp.versionCode < com.wristradar.BuildConfig.VERSION_CODE) item(key = "old-version") {
+            // Placeholder: features the friend's older app can't show yet.
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(p.warning.copy(alpha = 0.18f))
+                    .clickable { nav.navigate("updates") }.padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("${partnerName ?: "Your friend"} is on ${partnerApp.label}", fontSize = 11.sp, color = p.text)
+                Text(
+                    "They can't see newer features yet (" + missingFeatures(partnerApp.versionCode) + "). Tap to update them.",
+                    fontSize = 10.sp, color = p.textDim, textAlign = TextAlign.Center,
+                )
+            }
+        }
         if (list != null && list.isEmpty()) item { Hint("No messages yet. Say hi 👋") }
+        val byId = list?.associateBy { it.id }.orEmpty()
         list?.forEach { m ->
             if (m.id == firstUnreadId) item(key = "unread-divider") {
                 Text("— NEW —", style = WrType.label, color = p.primary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -159,6 +199,9 @@ fun ChatScreen(nav: NavHostController) {
                     animateIn = m.localTime > openedAt,
                     onImage = { nav.navigate("image/${m.id}") },
                     onRetry = { scope.launch { g.engine.messenger.retry(m.id) } },
+                    quoted = m.replyTo?.let { byId[it] },
+                    onLongPress = { nav.navigate("msg/${m.id}") },
+                    onReactTap = { e -> scope.launch { g.engine.messenger.react(m.id, e) } },
                 )
             }
         }
@@ -169,6 +212,16 @@ fun ChatScreen(nav: NavHostController) {
         }
         item(key = "input") {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (replyTarget != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(8.dp)).background(p.surface)
+                            .clickable { ChatReply.target = null }.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("↩ " + snippet(replyTarget), fontSize = 10.sp, color = p.textDim, maxLines = 1, modifier = Modifier.weight(1f))
+                        Text("✕", fontSize = 11.sp, color = p.text)
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(
                         onClick = { g.engine.messenger.sendTyping(true); sendText("Message ${partnerName ?: ""}".trim()) },
@@ -200,20 +253,81 @@ fun ChatScreen(nav: NavHostController) {
                         )
                     }
                 }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CompactChip(onClick = { nav.navigate("pinned") }, label = { Text("📌 Pinned", fontSize = 11.sp) },
+                        colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
+                    CompactChip(onClick = { nav.navigate("search") }, label = { Text("🔍 Search", fontSize = 11.sp) },
+                        colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CompactChip(onClick = { g.engine.messenger.nudge() }, enabled = conn.phase == Phase.CONNECTED,
+                        label = { Text("👋 Nudge", fontSize = 11.sp) },
+                        colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
+                    CompactChip(onClick = { nav.navigate("walk") }, label = { Text("🚶 Walk", fontSize = 11.sp) },
+                        colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
+                }
+                Text("Hold a message to react, reply, edit, pin or delete", fontSize = 9.sp, color = p.textDim, textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
 }
 
+/** Message being replied to (set from the message menu, cleared on send). */
+object ChatReply {
+    var target by mutableStateOf<ChatMessage?>(null)
+}
+
+/** Features the partner's older version is missing, for the "please update" placeholder. */
+fun missingFeatures(partnerVersion: Int): String {
+    val f = mutableListOf<String>()
+    if (partnerVersion < 2) f += listOf("blue ticks", "reactions", "replies", "edits")
+    if (partnerVersion < 3) f += listOf("nudges", "Bluetooth updates")
+    return f.joinToString(", ")
+}
+
+fun snippet(m: ChatMessage): String = when {
+    m.isAudio -> "🎤 Voice message"
+    m.isImage -> "📷 Photo"
+    else -> m.text.take(60)
+}
+
 private val animsEnabled: Boolean get() = WristRadarApp.graph.settings.current.animations != com.wristradar.data.AnimationLevel.OFF
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(m: ChatMessage, animateIn: Boolean, onImage: () -> Unit, onRetry: () -> Unit) {
+private fun MessageBubble(
+    m: ChatMessage, animateIn: Boolean, onImage: () -> Unit, onRetry: () -> Unit,
+    quoted: ChatMessage? = null, onLongPress: () -> Unit = {}, onReactTap: (String) -> Unit = {},
+) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
     val on = animationsOn()
     val anim = remember { Animatable(if (animateIn && on) 0f else 1f) }
     LaunchedEffect(Unit) { anim.animateTo(1f, tween(280)) }
+    if (m.isInfo) {
+        Box(Modifier.fillMaxWidth().graphicsLayer { alpha = anim.value }, contentAlignment = Alignment.Center) {
+            Text(
+                m.text, color = p.text, fontSize = 11.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 170.dp).clip(RoundedCornerShape(10.dp))
+                    .background(p.surface).padding(horizontal = 8.dp, vertical = 5.dp),
+            )
+        }
+        return
+    }
+    if (m.isAlert) {
+        // Intercepted / tampered message that was blocked: shown in red, centred.
+        Box(Modifier.fillMaxWidth().graphicsLayer { alpha = anim.value }, contentAlignment = Alignment.Center) {
+            Text(
+                m.text, color = Color.White, fontSize = 11.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 170.dp).clip(RoundedCornerShape(10.dp))
+                    .background(p.danger.copy(alpha = 0.85f)).padding(horizontal = 8.dp, vertical = 5.dp),
+            )
+        }
+        return
+    }
     val bubble = if (m.outgoing) p.outgoing else p.incoming
     val textColor = if (bubble.luminanceSafe() > 0.5f) Color.Black else p.text
     val shape = RoundedCornerShape(
@@ -229,24 +343,58 @@ private fun MessageBubble(m: ChatMessage, animateIn: Boolean, onImage: () -> Uni
     ) {
         Box(
             Modifier.widthIn(max = 150.dp).clip(shape).background(bubble)
-                .clickable(enabled = (m.isImage && !m.isAudio) || m.status == MsgStatus.FAILED) {
-                    if (m.status == MsgStatus.FAILED && m.outgoing) onRetry() else onImage()
-                }
+                .combinedClickable(
+                    onClick = {
+                        if (m.status == MsgStatus.FAILED && m.outgoing) onRetry()
+                        else if (m.isImage && !m.isAudio) onImage()
+                    },
+                    onLongClick = onLongPress,
+                )
                 .padding(if (m.isImage) 3.dp else 8.dp)
         ) {
-            if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else Text(m.text, color = textColor, fontSize = 14.sp)
+            Column {
+                if (m.replyTo != null) {
+                    Text(
+                        "↩ " + (quoted?.let { snippet(it) } ?: "deleted message"), fontSize = 10.sp, maxLines = 2,
+                        color = textColor.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(bottom = 3.dp).clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.18f)).padding(horizontal = 5.dp, vertical = 2.dp),
+                    )
+                }
+                if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else Text(m.text, color = textColor, fontSize = 14.sp)
+            }
+        }
+        val reacts = listOfNotNull(m.reactTheirs, m.reactMine)
+        if (reacts.isNotEmpty()) {
+            Row(Modifier.padding(horizontal = 4.dp).offset(y = (-4).dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                reacts.distinct().forEach { e ->
+                    val count = reacts.count { it == e }
+                    val mine = m.reactMine == e
+                    Text(
+                        e + if (count > 1) " 2" else "", fontSize = 11.sp,
+                        modifier = Modifier.clip(RoundedCornerShape(10.dp))
+                            .background(if (mine) p.primary.copy(alpha = 0.45f) else p.surface)
+                            .clickable { onReactTap(e) }.padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                }
+            }
         }
         val time = DateFormat.getTimeFormat(ctx).format(Date(m.localTime))
         val status = if (!m.outgoing) "" else when (m.status) {
             MsgStatus.PENDING -> " · sending"
             MsgStatus.TRANSFERRING -> " · ${m.progress}%"
             MsgStatus.DELIVERED -> " · ✓✓"
+            MsgStatus.SEEN -> " · ✓✓"
             MsgStatus.FAILED -> " · failed, tap to retry"
             else -> ""
         }
         Text(
-            time + status, fontSize = 9.sp,
-            color = if (m.status == MsgStatus.FAILED) p.danger else p.textDim,
+            (if (m.pinned) "📌 " else "") + time + (if (m.edited) " · edited" else "") + status, fontSize = 9.sp,
+            color = when (m.status) {
+                MsgStatus.FAILED -> p.danger
+                MsgStatus.SEEN -> SeenBlue        // blue ticks = seen
+                else -> p.textDim
+            },
             modifier = Modifier.padding(horizontal = 6.dp),
         )
     }
@@ -343,11 +491,58 @@ private fun AudioContent(m: ChatMessage) {
         }
         Spacer(Modifier.width(6.dp))
         Column(Modifier.weight(1f)) {
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(p.text.copy(alpha = 0.25f))) {
-                Box(Modifier.fillMaxWidth(if (isMe) progress else 0f).height(4.dp).background(p.text))
+            // Waveform: bar heights from the recording's loudness; played part is solid.
+            val bars by androidx.compose.runtime.produceState<FloatArray?>(null, m.id, ready) {
+                if (ready) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    WaveformCache.get(m.id) { g.messages.loadImageBytes(m.id) }
+                }
+            }
+            val wave = bars
+            val played = if (isMe) progress else 0f
+            val on = p.text; val off = p.text.copy(alpha = 0.3f)
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(18.dp)) {
+                val n = wave?.size ?: 24
+                val bw = size.width / n
+                for (i in 0 until n) {
+                    val h = ((wave?.get(i) ?: 0.15f).coerceIn(0.12f, 1f)) * size.height
+                    drawRoundRect(
+                        if ((i + 0.5f) / n <= played) on else off,
+                        topLeft = androidx.compose.ui.geometry.Offset(i * bw + bw * 0.2f, (size.height - h) / 2),
+                        size = androidx.compose.ui.geometry.Size(bw * 0.6f, h),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(bw * 0.3f),
+                    )
+                }
             }
             val s = m.durationMs / 1000
             Text(if (ready) "🎤 %d:%02d".format(s / 60, s % 60) else "${m.progress}%", fontSize = 10.sp, color = p.textDim)
         }
     }
+}
+
+/** Waveform bars per voice message, computed once from the stored audio. */
+object WaveformCache {
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, FloatArray>()
+    fun get(id: String, load: () -> ByteArray?): FloatArray? = cache[id] ?: run {
+        val pcm = load()?.let { runCatching { com.wristradar.audio.Adpcm.unpackVoice(it) }.getOrNull() } ?: return null
+        if (pcm.isEmpty()) return null
+        val n = 24
+        val per = maxOf(1, pcm.size / n)
+        val raw = FloatArray(n) { b ->
+            var sum = 0.0; var c = 0
+            var i = b * per
+            while (i < minOf(pcm.size, (b + 1) * per)) { sum += kotlin.math.abs(pcm[i].toInt()); c++; i += 4 }
+            if (c == 0) 0f else (sum / c).toFloat()
+        }
+        val max = raw.maxOrNull()?.takeIf { it > 0f } ?: 1f
+        raw.map { kotlin.math.sqrt(it / max) }.toFloatArray().also { cache[id] = it }
+    }
+}
+
+/** Blue used for "seen" ticks (readable on every theme). */
+private val SeenBlue = Color(0xFF34A6FF)
+
+/** Last scroll position in the chat, kept for the app's lifetime. */
+object ChatScrollMemory {
+    var index: Int = -1
+    var offset: Int = 0
 }

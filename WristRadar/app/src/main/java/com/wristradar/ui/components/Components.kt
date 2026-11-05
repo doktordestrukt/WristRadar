@@ -50,6 +50,7 @@ import com.wristradar.ble.DistanceEstimator
 import com.wristradar.core.Phase
 import com.wristradar.data.AnimationLevel
 import com.wristradar.ui.theme.LocalAnimation
+import com.wristradar.ui.theme.LocalButtonStyle
 import com.wristradar.ui.theme.LocalPalette
 import com.wristradar.ui.theme.Mono
 import com.wristradar.ui.theme.WrType
@@ -197,7 +198,13 @@ fun WrChip(
     enabled: Boolean = true,
 ) {
     val p = LocalPalette.current
+    val bs = LocalButtonStyle.current
     val colors = when {
+        bs.gradient && !danger -> ChipDefaults.gradientBackgroundChipColors(
+            startBackgroundColor = p.primary.copy(alpha = if (primary) 0.7f else 0.45f),
+            endBackgroundColor = p.secondary.copy(alpha = if (primary) 0.5f else 0.28f),
+            contentColor = p.text, secondaryContentColor = p.text.copy(alpha = 0.75f), iconColor = p.text,
+        )
         primary -> ChipDefaults.gradientBackgroundChipColors(
             startBackgroundColor = p.primary.copy(alpha = 0.55f),
             endBackgroundColor = p.secondary.copy(alpha = 0.35f),
@@ -213,6 +220,7 @@ fun WrChip(
         secondaryLabel = secondary?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 11.sp) } },
         icon = icon,
         colors = colors,
+        shape = bs.shape,
         modifier = Modifier.fillMaxWidth(),
     )
 }

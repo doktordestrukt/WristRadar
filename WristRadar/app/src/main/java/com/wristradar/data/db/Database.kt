@@ -16,7 +16,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
-object MsgKind { const val TEXT = 0; const val IMAGE = 1; const val AUDIO = 2 }
+object MsgKind { const val TEXT = 0; const val IMAGE = 1; const val AUDIO = 2; const val ALERT = 3; const val INFO = 4 }
 
 object MsgStatus {
     const val PENDING = 0      // queued, not yet acknowledged
@@ -24,6 +24,7 @@ object MsgStatus {
     const val RECEIVED = 2     // incoming, complete
     const val TRANSFERRING = 3 // image in flight (either direction)
     const val FAILED = 4
+    const val SEEN = 5         // partner opened the chat and saw it (blue ticks)
 }
 
 /**
@@ -45,6 +46,14 @@ data class MessageEntity(
     val height: Int = 0,
     val read: Boolean = true,
     @ColumnInfo(defaultValue = "0") val durationMs: Int = 0,
+    /** My reaction emoji on this message. */
+    val reactMine: String? = null,
+    /** Partner's reaction emoji on this message. */
+    val reactTheirs: String? = null,
+    /** Id of the message this one replies to. */
+    val replyTo: String? = null,
+    @ColumnInfo(defaultValue = "0") val edited: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val pinned: Boolean = false,
 )
 
 @Dao
@@ -79,11 +88,35 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE outgoing = 0 AND read = 0 ORDER BY localTime DESC LIMIT 5")
     suspend fun latestUnread(): List<MessageEntity>
 
+    @Query("SELECT id FROM messages WHERE outgoing = 0 AND read = 0 AND kind < 3")
+    suspend fun unreadIncomingIds(): List<String>
+
+    @Query("SELECT id FROM messages WHERE outgoing = 0 AND read = 1 AND kind < 3 ORDER BY localTime DESC LIMIT 50")
+    suspend fun recentReadIncomingIds(): List<String>
+
+    @Query("UPDATE messages SET status = 5 WHERE outgoing = 1 AND id IN (:ids) AND status IN (0, 1)")
+    suspend fun markSeen(ids: List<String>)
+
     @Query("UPDATE messages SET read = 1 WHERE read = 0")
     suspend fun markAllRead()
 
     @Query("DELETE FROM messages")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM messages WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("UPDATE messages SET reactMine = :emoji WHERE id = :id")
+    suspend fun setReactMine(id: String, emoji: String?)
+
+    @Query("UPDATE messages SET reactTheirs = :emoji WHERE id = :id")
+    suspend fun setReactTheirs(id: String, emoji: String?)
+
+    @Query("UPDATE messages SET bodyEnc = :body, edited = 1 WHERE id = :id")
+    suspend fun setBody(id: String, body: ByteArray)
+
+    @Query("UPDATE messages SET pinned = :pinned WHERE id = :id")
+    suspend fun setPinned(id: String, pinned: Boolean)
 }
 
 /** Local, offline security log for the Blackbox detector. Never contains message content or keys. */
@@ -112,7 +145,7 @@ interface SecurityEventDao {
     suspend fun clear()
 }
 
-@Database(entities = [MessageEntity::class, SecurityEventEntity::class], version = 3, exportSchema = true)
+@Database(entities = [MessageEntity::class, SecurityEventEntity::class], version = 4, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun messages(): MessageDao
     abstract fun securityEvents(): SecurityEventDao
@@ -120,8 +153,19 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "wristradar.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
+
+        /** V2: reactions, replies, edits and pins. Adds columns only - existing chats are kept. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN reactMine TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN reactTheirs TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN replyTo TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN edited INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE messages ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+            }
+        }
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {

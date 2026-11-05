@@ -238,6 +238,42 @@ public sealed partial class Engine
         switch (type)
         {
             case A.Typing: OnPartnerTyping(p.Length > 0 && p[0] == 1); return true;
+            case A.Seen:
+            {
+                var r = new In(p);
+                int n = Math.Clamp(r.I(), 0, 200);
+                var ids = new HashSet<string>();
+                for (int i = 0; i < n; i++) ids.Add(Ids.ToStr(r.Raw(16)));
+                lock (S.Messages) foreach (var m in S.Messages.Where(x => x.Outgoing && ids.Contains(x.Id) && x.Status is MsgStatus.Pending or MsgStatus.Delivered)) m.Status = MsgStatus.Seen;
+                S.SaveMessages(); Notify();
+                return true;
+            }
+            case A.React:
+            {
+                var r = new In(p); var id = Ids.ToStr(r.Raw(16)); var e = r.Str(32);
+                lock (S.Messages) foreach (var m in S.Messages.Where(x => x.Id == id)) m.ReactTheirs = e.Length == 0 ? null : e;
+                S.SaveMessages(); Notify(); return true;
+            }
+            case A.Edit:
+            {
+                var r = new In(p); var id = Ids.ToStr(r.Raw(16)); var t = r.Str(4000);
+                if (t.Length > 1000) t = t[..1000];
+                // Only the author can edit: the partner may only change messages they sent.
+                lock (S.Messages) foreach (var m in S.Messages.Where(x => x.Id == id && !x.Outgoing && !x.IsImage && !x.IsAlert)) { m.Text = t; m.Edited = true; }
+                S.SaveMessages(); Notify(); return true;
+            }
+            case A.Delete:
+            {
+                var id = Ids.ToStr(new In(p).Raw(16));
+                lock (S.Messages) S.Messages.RemoveAll(x => x.Id == id && !x.Outgoing && !x.IsAlert);
+                S.SaveMessages(); Notify(); return true;
+            }
+            case A.Pin:
+            {
+                var r = new In(p); var id = Ids.ToStr(r.Raw(16)); bool on = r.B() == 1;
+                lock (S.Messages) foreach (var m in S.Messages.Where(x => x.Id == id)) m.Pinned = on;
+                S.SaveMessages(); Notify(); return true;
+            }
             case A.CallInvite or A.CallAccept or A.CallDecline or A.CallEnd or A.CallAudio: OnCallSignal(type, p); return true;
             case A.SecurityNotice:
             {
@@ -245,9 +281,45 @@ public sealed partial class Engine
                 lock (S.SecurityLog) S.SecurityLog.Insert(0, new SecurityEvent { Time = Now(), Type = "PARTNER REPORTED", Detail = what, Device = "Partner's watch" });
                 S.SaveSecurityLog();
                 RaiseWarning("Your partner's watch detected an intrusion attempt", what, "Partner's watch", fromPartner: true);
+                AddAlert("⚠ Your partner's watch blocked an intercepted message");
                 return true;
             }
+            case A.Version: return true;
+            case A.UpdOffer: _ = SendApp(A.UpdReq, new Out().I(-1).Build()); return true;   // the PC can't install watch updates
+            case A.Nudge:
+                AddAlert("👋 " + (S.Trust?.PartnerName ?? "Your friend") + " nudged you");
+                System.Media.SystemSounds.Asterisk.Play();
+                return true;
         }
+        if (type >= 0x40 && _unknownSeen.Add(type))
+            AddAlert("✨ Your friend used a feature from a newer WristRadar. Update the PC app to see it.");
         return false;
+    }
+
+    readonly HashSet<byte> _unknownSeen = new();
+}
+
+public sealed partial class Engine
+{
+    /// <summary>Sends "seen" receipts for incoming messages the user has now looked at (partner's ticks turn blue).</summary>
+    public void MarkSeenAndSend()
+    {
+        if (!Connected) return;
+        List<Msg> unseen;
+        lock (S.Messages) unseen = S.Messages.Where(m => !m.Outgoing && !m.IsAlert && !m.SeenSent && m.Status == MsgStatus.Received).TakeLast(200).ToList();
+        if (unseen.Count == 0) return;
+        var o = new Out().I(unseen.Count);
+        foreach (var m in unseen) o.Raw(Ids.FromStr(m.Id));
+        foreach (var m in unseen) m.SeenSent = true;
+        S.SaveMessages();
+        _ = SendApp(A.Seen, o.Build());
+    }
+
+    /// <summary>Red in-chat notice for an intercepted/tampered message that was blocked.</summary>
+    public void AddAlert(string text)
+    {
+        var now = Now();
+        lock (S.Messages) S.Messages.Add(new Msg { Id = Ids.ToStr(Ids.NewId()), IsAlert = true, Text = text, LocalTime = now, SentAt = now, Status = MsgStatus.Received, SeenSent = true });
+        S.SaveMessages(); Notify();
     }
 }

@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -89,6 +93,7 @@ fun WrToggle(label: String, checked: Boolean, secondary: String? = null, onChang
             uncheckedStartBackgroundColor = p.surface, uncheckedEndBackgroundColor = p.surface,
             checkedToggleControlColor = p.primary, checkedContentColor = p.text, uncheckedContentColor = p.text,
         ),
+        shape = com.wristradar.ui.theme.LocalButtonStyle.current.shape,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -123,6 +128,12 @@ fun SettingsScreen(nav: NavHostController) {
 
     WrScreen {
         item { SectionLabel("Settings") }
+        item {
+            val up by g.engine.updater.state.collectAsState()
+            WrChip("Updates", { nav.navigate("updates") },
+                secondary = up.readyLabel?.let { "$it ready to install" } ?: "${BuildConfig.RELEASE_LABEL} · Bluetooth & GitHub",
+                icon = { Icon(Icons.Filled.Refresh, null) }, primary = up.readyLabel != null)
+        }
         item { WrChip("Appearance", { nav.navigate("appearance") }, secondary = themeName, icon = { Icon(Icons.Filled.Star, null) }) }
         item { WrChip("Notifications", { nav.navigate("notifications") }, icon = { Icon(Icons.Filled.Notifications, null) }) }
         item { WrChip("Privacy & security", { nav.navigate("privacy") }, icon = { Icon(Icons.Filled.Lock, null) }) }
@@ -224,9 +235,41 @@ fun ConnectionInfoScreen() {
     val s by g.settings.state.collectAsState()
     val last by g.trust.lastConnected.collectAsState()
     val partner by g.trust.partner.collectAsState()
+    var calNote by remember { mutableStateOf<String?>(null) }
     WrScreen {
         item { SectionLabel("Connection") }
         item { StatusLine(conn.phase) }
+        item {
+            val next = when (s.range) {
+                com.wristradar.data.RangeMode.MAX -> com.wristradar.data.RangeMode.BALANCED
+                com.wristradar.data.RangeMode.BALANCED -> com.wristradar.data.RangeMode.STEALTH
+                com.wristradar.data.RangeMode.STEALTH -> com.wristradar.data.RangeMode.MAX
+            }
+            WrChip(
+                "Range: " + when (s.range) {
+                    com.wristradar.data.RangeMode.MAX -> "Maximum"
+                    com.wristradar.data.RangeMode.BALANCED -> "Balanced"
+                    com.wristradar.data.RangeMode.STEALTH -> "Stealth"
+                },
+                { g.settings.update { it.copy(range = next) } },
+                secondary = when (s.range) {
+                    com.wristradar.data.RangeMode.MAX -> if (g.engine.longRangeSupported) "Max power + Bluetooth 5 long range" else "Max power (long range not supported here)"
+                    com.wristradar.data.RangeMode.BALANCED -> "Medium power, normal battery"
+                    com.wristradar.data.RangeMode.STEALTH -> "Lowest power, hardest to detect"
+                },
+                primary = s.range == com.wristradar.data.RangeMode.MAX,
+            )
+        }
+        if (partner != null) item {
+            WrChip(
+                "Calibrate distance",
+                { calNote = g.engine.calibrateDistance()?.let { "Saved: $it dBm = 1 m" } ?: "Connect to your partner first" },
+                secondary = calNote ?: if (s.rssiAt1m != null) "Calibrated (${s.rssiAt1m} dBm at 1 m)" else "Stand ~1 m apart, then tap",
+            )
+        }
+        if (s.rssiAt1m != null) item {
+            WrChip("Reset calibration", { g.settings.update { it.copy(rssiAt1m = null) }; calNote = null })
+        }
         if (conn.detail.isNotBlank()) item { Hint(conn.detail) }
         item { KeyValue("Signal strength", conn.rssi?.let { "$it dBm · ${DistanceEstimator.signalLabel(it)}" } ?: "--") }
         item {
@@ -281,21 +324,22 @@ fun AppearanceScreen(nav: NavHostController) {
     val s by g.settings.state.collectAsState()
     WrScreen {
         item { SectionLabel("Appearance") }
-        ThemePresets.all.forEach { preset ->
-            item(key = preset.id) {
-                WrChip(
-                    preset.name, { g.settings.update { it.copy(themeId = preset.id) } },
-                    secondary = if (s.themeId == preset.id) "Active" else null,
-                    icon = {
-                        Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
-                            Swatch(Color(preset.colors.background), 14.dp)
-                            Swatch(Color(preset.colors.primary), 14.dp, selected = s.themeId == preset.id)
-                            Swatch(Color(preset.colors.secondary), 14.dp)
-                        }
-                    },
-                )
-            }
+        item { SectionLabel("Style") }
+        item {
+            val fonts = com.wristradar.data.FontChoice.entries
+            WrChip("Font", { g.settings.update { it.copy(font = fonts[(fonts.indexOf(it.font) + 1) % fonts.size]) } },
+                secondary = s.font.label + " (tap to change)")
         }
+        item {
+            val shapes = com.wristradar.data.ButtonShape.entries
+            WrChip("Button shape", { g.settings.update { it.copy(buttonShape = shapes[(shapes.indexOf(it.buttonShape) + 1) % shapes.size]) } },
+                secondary = s.buttonShape.label + " (tap to change)")
+        }
+        item { WrToggle("Gradient buttons", s.buttonGradient, "Colour fade on every button") { v -> g.settings.update { it.copy(buttonGradient = v) } } }
+        item { SectionLabel("Gradient themes") }
+        ThemePresets.all.filter { it.gradient != null }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
+        item { SectionLabel("Dark themes") }
+        ThemePresets.all.filter { it.gradient == null }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
         item {
             WrChip(
                 "Custom theme", { g.settings.update { it.copy(themeId = ThemePresets.CUSTOM_ID) }; nav.navigate("custom") },
@@ -321,6 +365,26 @@ fun AppearanceScreen(nav: NavHostController) {
         }
         item { Hint("Dims WristRadar only. Black backgrounds save the most battery on AMOLED.") }
     }
+}
+
+@Composable
+private fun ThemeChip(preset: com.wristradar.data.ThemePreset, active: Boolean, onClick: () -> Unit) {
+    WrChip(
+        preset.name, onClick,
+        secondary = if (active) "Active" else null,
+        icon = {
+            val grad = preset.gradient
+            if (grad != null) {
+                Box(Modifier.size(22.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(androidx.compose.ui.graphics.Brush.linearGradient(grad.map { Color(it) }))
+                    .border(if (active) 2.dp else 1.dp, if (active) Color.White else Color.White.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape))
+            } else Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+                Swatch(Color(preset.colors.background), 14.dp)
+                Swatch(Color(preset.colors.primary), 14.dp, selected = active)
+                Swatch(Color(preset.colors.secondary), 14.dp)
+            }
+        },
+    )
 }
 
 @Composable
