@@ -54,6 +54,8 @@ data class MessageEntity(
     val replyTo: String? = null,
     @ColumnInfo(defaultValue = "0") val edited: Boolean = false,
     @ColumnInfo(defaultValue = "0") val pinned: Boolean = false,
+    /** Secret flags: 1 = vanish after reading, 2 = hold to reveal. */
+    @ColumnInfo(defaultValue = "0") val secret: Int = 0,
 )
 
 @Dao
@@ -145,7 +147,7 @@ interface SecurityEventDao {
     suspend fun clear()
 }
 
-@Database(entities = [MessageEntity::class, SecurityEventEntity::class], version = 4, exportSchema = true)
+@Database(entities = [MessageEntity::class, SecurityEventEntity::class], version = 5, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun messages(): MessageDao
     abstract fun securityEvents(): SecurityEventDao
@@ -153,8 +155,15 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "wristradar.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
+
+        /** V4: secret / vanishing messages. Adds a column only - chats are kept. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN secret INTEGER NOT NULL DEFAULT 0")
+            }
+        }
 
         /** V2: reactions, replies, edits and pins. Adds columns only - existing chats are kept. */
         private val MIGRATION_3_4 = object : Migration(3, 4) {

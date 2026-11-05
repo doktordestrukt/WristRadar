@@ -124,6 +124,12 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                 )
             }
             item {
+                val mood by g.engine.extras.partnerMood.collectAsState()
+                WrChip("✨ Fun & extras", { nav.navigate("fun") },
+                    secondary = mood?.let { "${partnerName ?: "Friend"}: $it" } ?: "Games, draw, SOS and more",
+                    icon = { Text("🎮", fontSize = 16.sp) })
+            }
+            item {
                 WrChip("Walk to ${partnerName ?: "partner"}", { nav.navigate("walk") },
                     secondary = "Steps, distance & time",
                     icon = { Text("🚶", fontSize = 16.sp) })

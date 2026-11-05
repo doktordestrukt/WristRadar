@@ -89,7 +89,7 @@ public sealed class MainForm : Form
     void BuildLeft()
     {
         var title = new Label { Text = "WRISTRADAR", Font = Theme.Title, ForeColor = Theme.Primary, Dock = DockStyle.Top, Height = 40 };
-        var sub = new Label { Text = "PC COMPANION · V2", Font = new Font("Consolas", 8f), ForeColor = Theme.Dim, Dock = DockStyle.Top, Height = 22 };
+        var sub = new Label { Text = "PC COMPANION · V4", Font = new Font("Consolas", 8f), ForeColor = Theme.Dim, Dock = DockStyle.Top, Height = 22 };
         _profile.Paint += PaintProfile;
         _profile.Cursor = Cursors.Hand;
         _profile.Click += (_, _) => PickAvatar();

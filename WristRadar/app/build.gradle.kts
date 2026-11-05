@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 3
-val wrVersionName = "3.0.0"
-val wrReleaseLabel = "V3"
+val wrVersionCode = 4
+val wrVersionName = "4.0.0"
+val wrReleaseLabel = "V4"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.
@@ -97,6 +97,12 @@ dependencies {
 
     implementation("androidx.wear:wear-input:1.2.0")
     implementation("androidx.wear:wear-ongoing:1.0.0")
+    // Watch tile + watch-face complication ("glance" at your friend)
+    implementation("androidx.wear.tiles:tiles:1.4.1")
+    implementation("androidx.wear.protolayout:protolayout:1.2.1")
+    implementation("androidx.wear.protolayout:protolayout-expression:1.2.1")
+    implementation("androidx.concurrent:concurrent-futures:1.2.0")
+    implementation("androidx.wear.watchface:watchface-complications-data-source-ktx:1.2.1")
 
     implementation("androidx.room:room-runtime:2.7.2")
     implementation("androidx.room:room-ktx:2.7.2")

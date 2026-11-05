@@ -286,6 +286,19 @@ public sealed partial class Engine
             }
             case A.Version: return true;
             case A.UpdOffer: _ = SendApp(A.UpdReq, new Out().I(-1).Build()); return true;   // the PC can't install watch updates
+            case A.Blast:
+            {
+                string e; try { e = new In(p).Str(16); } catch { e = "✨"; }
+                AddAlert(e + " " + e + " " + e + "  - " + (S.Trust?.PartnerName ?? "Your friend") + " sent an emoji blast");
+                return true;
+            }
+            case A.Sos:
+                if (p.Length > 0 && p[0] == 1)
+                {
+                    AddAlert("🆘 " + (S.Trust?.PartnerName ?? "Your friend") + " sent an SOS - check on them!");
+                }
+                return true;
+            case A.Mood: return true;
             case A.Nudge:
                 AddAlert("👋 " + (S.Trust?.PartnerName ?? "Your friend") + " nudged you");
                 System.Media.SystemSounds.Asterisk.Play();

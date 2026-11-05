@@ -67,7 +67,7 @@ import kotlin.random.Random
  */
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalCoroutinesApi::class)
-class RadarEngine(private val ctx: Context, private val g: AppGraph) {
+class RadarEngine(val ctx: Context, private val g: AppGraph) {
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
 
@@ -82,6 +82,7 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
     val calls = com.wristradar.audio.CallManager(ctx, g, this)
     val updater = Updater(ctx, g, this)
     val walk = WalkTracker(ctx, g.settings)
+    val extras = FunHub(ctx, g, this)
 
     private val _presence = MutableStateFlow(Presence())
     val presence: StateFlow<Presence> = _presence.asStateFlow()
@@ -410,7 +411,7 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
                 catch (e: Exception) { Log.w(TAG, "bad app message type=${m[0]}: ${e.javaClass.simpleName}") }
             }
         }
-        scope.launch { updater.onSessionUp(s); messenger.onSessionUp(s) }
+        scope.launch { updater.onSessionUp(s); messenger.onSessionUp(s); extras.onSessionUp(s) }
     }
 
     // =================================================================== links & frames
@@ -521,11 +522,14 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
         serverHandshakes.remove(l.id)
         pairing.onLinkClosed(l)
         if (session?.link === l) {
+            val startedAt = session?.startedAt ?: now()
             session?.close()
             session = null
             g.trust.markPartnerSeen()
             calls.onLinkLost()
             updater.onSessionDown()
+            extras.onSessionDown()
+            if (!renewing) extras.onLinkLost(now() - startedAt)
             typingJob?.cancel()
             _presence.update { it.copy(partnerTyping = false) }
             remoteBattery = null
@@ -573,6 +577,7 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
                 // Max Range: drop to the Coded PHY (long range) when the signal gets weak, back to fast PHY when close.
                 if (rssi != null && g.settings.current.range == RangeMode.MAX) (s.link as? ClientLink)?.adaptPhy(rssi)
                 if (rssi != null) { partnerEst.add(rssi); publishDistance() }
+                partnerEst.smoothedRssi?.let { extras.onSignal(it.roundToInt()) }
                 messenger.sendStatus(s, rssi)
                 messenger.retryTick(s)
             }
@@ -736,7 +741,9 @@ class RadarEngine(private val ctx: Context, private val g: AppGraph) {
     }
 
     private fun setPhase(p: Phase, detail: String) {
+        val was = _conn.value.phase
         _conn.update { it.copy(phase = p, detail = detail) }
+        if ((was == Phase.CONNECTED) != (p == Phase.CONNECTED)) com.wristradar.glance.Glance.refresh(ctx)
     }
 
     private fun baselinePhase() = if (g.trust.partner.value == null) Phase.NOT_PAIRED else Phase.STANDBY

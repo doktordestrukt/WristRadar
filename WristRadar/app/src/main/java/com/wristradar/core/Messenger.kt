@@ -87,6 +87,13 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
                 if (g.messages.get(id) != null) g.messages.setPinned(id, on)
             }
             A.VERSION, A.UPD_OFFER, A.UPD_REQ, A.UPD_CHUNK, A.UPD_ACK -> engine.updater.handle(session, type, p)
+            A.SECRET -> onText(session, p, secret = true)
+            A.OPENED -> {
+                val id = In(p).uuid().toString()
+                val e = g.messages.get(id)
+                if (e != null && e.outgoing && (e.secret and 1) != 0) g.messages.delete(id)
+            }
+            A.BLAST, A.GAME, A.TAPS, A.SOS, A.TODO, A.MOOD -> engine.extras.handle(type, p)
             A.NUDGE -> {
                 g.notifier.nudge()
                 insertInfo("👋 ${g.profile.partnerName.value ?: "Your friend"} nudged you")
@@ -122,6 +129,14 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         )
     }
 
+    /** A vanishing secret I received was read: delete it here and on the sender's watch. */
+    suspend fun secretOpened(id: String) {
+        val e = g.messages.get(id) ?: return
+        if (e.outgoing || (e.secret and 1) == 0) return
+        g.messages.delete(id)
+        sendAction(A.OPENED, Out().uuid(UUID.fromString(id)).build())
+    }
+
     private var lastNudge = 0L
 
     /** Buzz the partner's watch (max once every 5 s). */
@@ -134,26 +149,28 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         return true
     }
 
-    private suspend fun onText(session: SecureSession, p: ByteArray) {
+    private suspend fun onText(session: SecureSession, p: ByteArray, secret: Boolean = false) {
         val r = In(p)
         val id = r.uuid()
         val seq = r.l()
         val sentAt = r.l()
         val text = r.str(4000).take(MAX_TEXT)
-        val replyTo = if (r.hasMore()) runCatching { r.uuid().toString() }.getOrNull() else null
+        val flags = if (secret) (r.b().toInt() and 3).let { if (it == 1) 3 else it } else 0   // vanishing always needs a hold
+        val replyTo = if (!secret && r.hasMore()) runCatching { r.uuid().toString() }.getOrNull() else null
         val sid = id.toString()
         val entity = MessageEntity(
             id = sid, outgoing = false, kind = MsgKind.TEXT,
             bodyEnc = g.messages.encryptBody(sid, text), senderSeq = seq, sentAt = sentAt,
             localTime = System.currentTimeMillis(), status = MsgStatus.RECEIVED,
-            read = g.uiVisibility.chatVisible, replyTo = replyTo,
+            read = g.uiVisibility.chatVisible, replyTo = replyTo, secret = flags,
         )
         val isNew = g.messages.insertIgnore(entity)
         session.send(A.ACK, Out().uuid(id).build())          // ACK duplicates too
-        if (isNew) onIncoming(entity, text)
+        if (isNew) onIncoming(entity, if (flags != 0) "🤫 Secret message" else text)
     }
 
     private suspend fun onIncoming(e: MessageEntity, preview: String) {
+        com.wristradar.glance.Glance.refresh(engine.ctx)
         if (g.uiVisibility.chatVisible) {
             sendSeen(g.messages.markAllRead())
             g.notifier.tick()
@@ -165,7 +182,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     // ---------- sending ----------
 
-    suspend fun sendText(raw: String, replyTo: String? = null): Boolean {
+    suspend fun sendText(raw: String, replyTo: String? = null, secret: Int = 0): Boolean {
         engine.lastActivity = System.currentTimeMillis()
         val text = raw.trim().take(MAX_TEXT)
         if (text.isEmpty() || g.trust.partner.value == null) return false
@@ -174,7 +191,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         val e = MessageEntity(
             id = id.toString(), outgoing = true, kind = MsgKind.TEXT,
             bodyEnc = g.messages.encryptBody(id.toString(), text), senderSeq = g.trust.nextSequence(),
-            sentAt = now, localTime = now, status = MsgStatus.PENDING, replyTo = replyTo,
+            sentAt = now, localTime = now, status = MsgStatus.PENDING, replyTo = if (secret != 0) null else replyTo, secret = secret,
         )
         g.messages.upsert(e)
         engine.currentSession()?.let { transmitText(it, e, text) }
@@ -292,6 +309,12 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
     private suspend fun transmitText(s: SecureSession, e: MessageEntity, text: String) {
         lastAttempt[e.id] = System.currentTimeMillis()
         val out = Out().uuid(UUID.fromString(e.id)).l(e.senderSeq).l(e.sentAt).str(text)
+        if (e.secret != 0) {
+            // Older apps (and the PC) can't open secrets: hold them until the friend updates.
+            val pa = engine.updater.state.value.partner
+            if (pa == null || pa.versionCode < 4 || !pa.isWatch) return
+            s.send(A.SECRET, out.b(e.secret.toByte()).build()); return
+        }
         e.replyTo?.let { runCatching { out.uuid(UUID.fromString(it)) } }
         s.send(A.TEXT, out.build())
     }

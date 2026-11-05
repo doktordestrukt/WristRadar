@@ -105,5 +105,31 @@
         <receiver
             android:name=".core.InstallResultReceiver"
             android:exported="false" />
+
+        <!-- Tile: swipe from the watch face to see your friend -->
+        <service
+            android:name=".glance.FriendTileService"
+            android:exported="true"
+            android:label="WristRadar friend"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data android:name="androidx.wear.tiles.PREVIEW" android:resource="@mipmap/ic_launcher" />
+        </service>
+
+        <!-- Complication: unread / distance / streak on any watch face -->
+        <service
+            android:name=".glance.FriendComplicationService"
+            android:exported="true"
+            android:label="WristRadar friend"
+            android:icon="@mipmap/ic_launcher"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data android:name="android.support.wearable.complications.SUPPORTED_TYPES" android:value="SHORT_TEXT" />
+            <meta-data android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS" android:value="300" />
+        </service>
     </application>
 </manifest>

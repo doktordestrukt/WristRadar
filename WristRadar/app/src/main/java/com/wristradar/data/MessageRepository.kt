@@ -37,6 +37,7 @@ data class ChatMessage(
     val pinned: Boolean = false,
     /** Neutral system note (nudges, "update to see this"). */
     val isInfo: Boolean = false,
+    val secret: Int = 0,
 )
 
 class MessageRepository(
@@ -62,7 +63,7 @@ class MessageRepository(
         bodyEnc?.let { decryptBody(id, it) } ?: "",
         sentAt, localTime, status, progress, width, height, read,
         kind == MsgKind.AUDIO, kind == MsgKind.ALERT, durationMs,
-        reactMine, reactTheirs, replyTo, edited, pinned, kind == MsgKind.INFO,
+        reactMine, reactTheirs, replyTo, edited, pinned, kind == MsgKind.INFO, secret,
     )
 
     fun encryptBody(id: String, text: String): ByteArray = vault.encrypt(text.toByteArray(), "msg:$id")

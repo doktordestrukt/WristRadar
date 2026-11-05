@@ -155,8 +155,12 @@ fun ChatScreen(nav: NavHostController) {
                 Spacer(Modifier.width(6.dp))
                 Column {
                     Text(partnerName ?: "Partner", fontSize = 14.sp, color = p.text)
+                    val mood by g.engine.extras.partnerMood.collectAsState()
+                    mood?.let { Text(it, fontSize = 9.sp, color = p.textDim, maxLines = 1) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         StatusDot(conn.phase, 6.dp)
+                        val streak = list?.let { streakDays(it) } ?: 0
+                        if (streak > 0) Text("🔥$streak ", fontSize = 10.sp, color = p.warning)
                         androidx.compose.animation.AnimatedContent(presence.partnerTyping, label = "typing") { typing ->
                             if (typing) Text("typing…", fontSize = 10.sp, color = p.primary)
                             else Text(presenceText(conn.phase == Phase.CONNECTED, lastSeen), fontSize = 10.sp, color = phaseColor(conn.phase))
@@ -268,10 +272,47 @@ fun ChatScreen(nav: NavHostController) {
                     CompactChip(onClick = { nav.navigate("walk") }, label = { Text("🚶 Walk", fontSize = 11.sp) },
                         colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
                 }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CompactChip(onClick = { nav.navigate("fun") }, label = { Text("✨ Fun", fontSize = 11.sp) },
+                        colors = ChipDefaults.chipColors(backgroundColor = p.primary.copy(alpha = 0.35f), contentColor = p.text))
+                    CompactChip(onClick = { nav.navigate("secret") }, enabled = partner != null, label = { Text("🤫 Secret", fontSize = 11.sp) },
+                        colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
+                }
                 Text("Hold a message to react, reply, edit, pin or delete", fontSize = 9.sp, color = p.textDim, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 4.dp))
             }
         }
+    }
+}
+
+/** Secret text: my own shows with a label; theirs is hidden until pressed and held. */
+@Composable
+private fun SecretContent(m: ChatMessage, textColor: Color) {
+    val g = WristRadarApp.graph
+    val scope = rememberCoroutineScope()
+    val vanish = (m.secret and 1) != 0
+    if (m.outgoing) {
+        Column {
+            Text(m.text, color = textColor, fontSize = 14.sp)
+            Text(if (vanish) "🔥 vanishes after reading" else "🙈 hold to reveal", fontSize = 9.sp, color = textColor.copy(alpha = 0.6f))
+        }
+        return
+    }
+    var showing by remember { mutableStateOf(false) }
+    var opened by remember { mutableStateOf(false) }
+    Box(
+        Modifier.pointerInput(m.id) {
+            detectTapGestures(onPress = {
+                showing = true; opened = true
+                tryAwaitRelease()
+                showing = false
+                if (vanish) scope.launch { g.engine.messenger.secretOpened(m.id) }
+            })
+        }
+    ) {
+        if (showing) Text(m.text, color = textColor, fontSize = 14.sp)
+        else Text(if (vanish) "🔥 Hold to read\n(vanishes after)" else "🙈 Hold to reveal", color = textColor.copy(alpha = 0.75f), fontSize = 12.sp)
     }
 }
 
@@ -285,6 +326,7 @@ fun missingFeatures(partnerVersion: Int): String {
     val f = mutableListOf<String>()
     if (partnerVersion < 2) f += listOf("blue ticks", "reactions", "replies", "edits")
     if (partnerVersion < 3) f += listOf("nudges", "Bluetooth updates")
+    if (partnerVersion < 4) f += listOf("games", "emoji blasts", "secret messages", "SOS", "tap code", "status")
     return f.joinToString(", ")
 }
 
@@ -361,7 +403,8 @@ private fun MessageBubble(
                             .background(Color.Black.copy(alpha = 0.18f)).padding(horizontal = 5.dp, vertical = 2.dp),
                     )
                 }
-                if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else Text(m.text, color = textColor, fontSize = 14.sp)
+                if (m.secret != 0) SecretContent(m, textColor)
+                else if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else Text(m.text, color = textColor, fontSize = 14.sp)
             }
         }
         val reacts = listOfNotNull(m.reactTheirs, m.reactMine)

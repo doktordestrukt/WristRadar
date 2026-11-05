@@ -49,6 +49,9 @@ import com.wristradar.ui.theme.WristRadarTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/** Screens where swiping right must not close the screen (drawing, games, holding buttons). */
+private val NoSwipeRoutes = setOf("call", "draw", "game", "taps", "sos")
+
 /** Small in-memory hand-off between the picker and preview screens. */
 /** Bumped when a call notification is tapped so the call screen opens. */
 val callSignalFlow = MutableStateFlow(0)
@@ -149,7 +152,7 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     Box(Modifier.fillMaxSize()) {
     // Swipe-back is off on the call screen so it can't fight the hang-up/answer sliders.
     val entry by nav.currentBackStackEntryFlow.collectAsState(initial = null)
-    SwipeDismissableNavHost(navController = nav, startDestination = "home", userSwipeEnabled = entry?.destination?.route != "call") {
+    SwipeDismissableNavHost(navController = nav, startDestination = "home", userSwipeEnabled = entry?.destination?.route !in NoSwipeRoutes) {
         composable("home") { HomeScreen(nav, requestPermissions) }
         composable("discovery") { DiscoveryScreen(nav) }
         composable("pair/{id}") { PairTargetScreen(nav, it.arguments?.getString("id")?.toIntOrNull() ?: 0) }
@@ -172,8 +175,22 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("msg/{id}") { com.wristradar.ui.screens.MessageActionsScreen(nav, it.arguments?.getString("id") ?: "") }
         composable("pinned") { com.wristradar.ui.screens.PinnedScreen(nav) }
         composable("search") { com.wristradar.ui.screens.SearchScreen(nav) }
+        composable("fun") { com.wristradar.ui.screens.FunMenuScreen(nav) }
+        composable("draw") { com.wristradar.ui.screens.DrawScreen(nav) }
+        composable("blast") { com.wristradar.ui.screens.BlastScreen(nav) }
+        composable("games") { com.wristradar.ui.screens.GamesScreen(nav) }
+        composable("game") { com.wristradar.ui.screens.GameScreen(nav) }
+        composable("taps") { com.wristradar.ui.screens.TapCodeScreen(nav) }
+        composable("secret") { com.wristradar.ui.screens.SecretScreen(nav) }
+        composable("sos") { com.wristradar.ui.screens.SosScreen(nav) }
+        composable("hideseek") { com.wristradar.ui.screens.HideSeekScreen() }
+        composable("todo") { com.wristradar.ui.screens.TodoScreen() }
+        composable("mood") { com.wristradar.ui.screens.MoodScreen(nav) }
         composable("updates") { com.wristradar.ui.screens.UpdatesScreen() }
-        composable("walk") { com.wristradar.ui.screens.WalkScreen() }
+        composable("walk") {
+            com.wristradar.ui.screens.HideSeekNav.go = { nav.navigate("hideseek") }
+            com.wristradar.ui.screens.WalkScreen()
+        }
         composable("whatsnew") { com.wristradar.ui.screens.WhatsNewScreen(nav) }
         composable("disclaimer") { com.wristradar.ui.screens.DisclaimerScreen() }
         composable("blackbox") { BlackboxSettingsScreen(nav) }
@@ -186,6 +203,9 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     // Overlays above every screen: in-app banner, security warning (users), BLACKBOX (intruder only).
     com.wristradar.ui.components.TopBanner(onOpen = { nav.navigate("chat") { launchSingleTop = true } })
     com.wristradar.ui.blackbox.SecurityWarningOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
+    com.wristradar.ui.screens.GameInviteOverlay(onOpen = { nav.navigate("game") { launchSingleTop = true } })
+    com.wristradar.ui.screens.BlastOverlay()
+    com.wristradar.ui.screens.SosOverlay(onWalk = { nav.navigate("walk") { launchSingleTop = true } })
     BlackboxOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
     }
 }

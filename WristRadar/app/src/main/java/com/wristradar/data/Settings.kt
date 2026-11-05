@@ -110,6 +110,8 @@ data class Settings(
     val heightCm: Int = 170,
     /** Learned walking speed in m/s (0 = not learned yet). */
     val walkSpeed: Float = 0f,
+    /** Buzz when the partner is about to go out of range / is lost. */
+    val rangeAlert: Boolean = true,
 ) {
     val gradient: List<Int>?
         get() = if (themeId == ThemePresets.CUSTOM_ID) null else ThemePresets.byId(themeId)?.gradient
@@ -157,6 +159,7 @@ class SettingsStore(context: Context) {
             lastGithubCheck = prefs.getLong("upd_gh_last", d.lastGithubCheck),
             heightCm = prefs.getInt("height", d.heightCm),
             walkSpeed = prefs.getFloat("walk_speed", d.walkSpeed),
+            rangeAlert = prefs.getBoolean("range_alert", d.rangeAlert),
         )
     }
 
@@ -182,6 +185,7 @@ class SettingsStore(context: Context) {
             .putBoolean("upd_send", s.autoSendUpdates).putBoolean("upd_install", s.autoInstallUpdates)
             .putBoolean("upd_github", s.githubUpdates).putLong("upd_gh_last", s.lastGithubCheck)
             .putInt("height", s.heightCm).putFloat("walk_speed", s.walkSpeed)
+            .putBoolean("range_alert", s.rangeAlert)
             .apply()
         _state.value = s
     }

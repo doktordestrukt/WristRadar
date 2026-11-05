@@ -353,7 +353,7 @@ public sealed partial class Engine
 
     async Task OnSessionUp()
     {
-        await SendApp(A.Version, new Out().I(2).Str("V2").B(1).Build());   // platform 1 = PC: never sent watch APKs
+        await SendApp(A.Version, new Out().I(4).Str("V4").B(1).Build());   // platform 1 = PC: never sent watch APKs
         await SendProfile();
         await SendStatus();
         await RetryPending(force: true);

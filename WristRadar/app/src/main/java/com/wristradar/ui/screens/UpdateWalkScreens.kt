@@ -102,6 +102,9 @@ private fun Progress(label: String, pct: Int) {
 
 // --------------------------------------------------------------------------------- walk
 
+/** Set by the nav host so the walk screen can open hide & seek. */
+object HideSeekNav { var go: (() -> Unit)? = null }
+
 /** How far your friend is, as a walk: steps, metres/feet, km/miles and time at your pace. */
 @Composable
 fun WalkScreen() {
@@ -156,6 +159,8 @@ fun WalkScreen() {
             }
             item { Hint("Distance comes from Bluetooth signal strength, so it's an estimate. Calibrate in Settings › Connection for better numbers.") }
         }
+        item { WrChip("🌡 Hide & seek mode", { HideSeekNav.go?.invoke() }, secondary = "Warmer / colder") }
+        item { WrToggle("Range alerts", s.rangeAlert, "Buzz when your friend is leaving range") { v -> g.settings.update { it.copy(rangeAlert = v) } } }
         item { SectionLabel("Your height") }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {

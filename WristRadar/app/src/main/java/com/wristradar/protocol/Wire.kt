@@ -61,6 +61,22 @@ object A {
     const val UPD_ACK: Byte = 0x5A
     /** Buzz the partner's watch. */
     const val NUDGE: Byte = 0x5B
+    /** Full-screen emoji on the partner's watch: emoji string. */
+    const val BLAST: Byte = 0x5C
+    /** Games: game byte, op byte, id int, value int. */
+    const val GAME: Byte = 0x5D
+    /** Tap code: count int + vibration durations (ms, on/off alternating). */
+    const val TAPS: Byte = 0x5E
+    /** Secret text: like TEXT plus a flags byte (1 = vanish after reading, 2 = hold to reveal). */
+    const val SECRET: Byte = 0x5F
+    /** SOS: byte 1 = SOS, 0 = "I saw it, coming". Vibration only, no sound. */
+    const val SOS: Byte = 0x60
+    /** Shared to-do list: op byte (0 add, 1 done, 2 delete) + uuid + data. */
+    const val TODO: Byte = 0x61
+    /** Mood / status text. */
+    const val MOOD: Byte = 0x62
+    /** A vanishing secret was opened: uuid (sender deletes its copy too). */
+    const val OPENED: Byte = 0x63
 }
 
 class Out {
