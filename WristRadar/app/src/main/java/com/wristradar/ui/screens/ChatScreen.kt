@@ -294,7 +294,7 @@ fun missingFeatures(partnerVersion: Int): String {
     val f = mutableListOf<String>()
     if (partnerVersion < 2) f += listOf("blue ticks", "reactions", "replies", "edits")
     if (partnerVersion < 3) f += listOf("nudges", "Bluetooth updates")
-    if (partnerVersion < 4) f += listOf("games", "emoji blasts", "SOS", "tap code", "status")
+    if (partnerVersion < 4) f += listOf("games", "emoji blasts", "tap code", "status")
     return f.joinToString(", ")
 }
 

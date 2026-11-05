@@ -59,18 +59,13 @@ data class Score(val wins: Int = 0, val losses: Int = 0, val draws: Int = 0)
 
 /**
  * Two-person extras over the encrypted session: emoji blasts, games, tap code (vibration),
- * silent SOS, shared to-do list, mood status and the "leaving range" alert.
+ * shared to-do list, mood status and the "leaving range" alert.
  */
 class FunHub(private val ctx: Context, private val g: AppGraph, private val engine: RadarEngine) {
 
     // ---- overlays shown above every screen
     private val _blast = MutableStateFlow<String?>(null)
     val blast: StateFlow<String?> = _blast.asStateFlow()
-    private val _sos = MutableStateFlow<Long?>(null)          // time the partner's SOS arrived
-    val sos: StateFlow<Long?> = _sos.asStateFlow()
-    private val _sosAnswered = MutableStateFlow(false)          // my SOS was seen
-    val sosAnswered: StateFlow<Boolean> = _sosAnswered.asStateFlow()
-
     private val _game = MutableStateFlow<GameState?>(null)
     val game: StateFlow<GameState?> = _game.asStateFlow()
 
@@ -83,7 +78,6 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
     private val prefs = ctx.getSharedPreferences("wr_fun", Context.MODE_PRIVATE)
     private val todoFile = File(ctx.filesDir, "todo.bin")
     private val pending = ConcurrentLinkedQueue<Pair<Byte, ByteArray>>()
-    private var sosBuzz: Job? = null
     private var lastRangeAlert = 0L
     private var weak = false
 
@@ -127,17 +121,6 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
                 buzz(pattern)
                 engine.messenger.insertInfo("📳 ${name()} sent you a tap code (${(n + 1) / 2} taps)")
             }
-            A.SOS -> {
-                if (r.b().toInt() == 1) {
-                    _sos.value = System.currentTimeMillis()
-                    startSosBuzz()
-                    g.notifier.showInfo("🆘 ${name()} needs you", "Open WristRadar to see how far away they are")
-                    engine.messenger.insertInfo("🆘 ${name()} sent an SOS")
-                } else {
-                    _sosAnswered.value = true
-                    engine.messenger.insertInfo("✅ ${name()} saw your SOS and is on the way")
-                }
-            }
             A.MOOD -> {
                 val m = r.str(60).trim().take(40).ifBlank { null }
                 _partnerMood.value = m
@@ -170,35 +153,6 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
         p.forEach { out.i(it.coerceIn(20, 1500).toInt()) }
         send(A.TAPS, out.build())
         return true
-    }
-
-    // ------------------------------------------------------------------ SOS (silent: vibration only)
-
-    fun sendSos(): Boolean {
-        if (engine.currentSession() == null) return false
-        _sosAnswered.value = false
-        send(A.SOS, byteArrayOf(1))
-        engine.scope.launch { engine.messenger.insertInfo("🆘 You sent an SOS") }
-        return true
-    }
-
-    /** I saw my friend's SOS: stop buzzing and tell them. */
-    fun answerSos() {
-        _sos.value = null
-        sosBuzz?.cancel()
-        runCatching { ctx.getSystemService(VibratorManager::class.java)?.defaultVibrator?.cancel() }
-        send(A.SOS, byteArrayOf(0), queueIfOffline = true)
-    }
-
-    private fun startSosBuzz() {
-        sosBuzz?.cancel()
-        sosBuzz = engine.scope.launch {
-            val until = System.currentTimeMillis() + 60_000
-            while (_sos.value != null && System.currentTimeMillis() < until) {
-                strongBuzz(longArrayOf(0, 400, 150, 400, 150, 400, 600))
-                delay(2_200)
-            }
-        }
     }
 
     // ------------------------------------------------------------------ leaving range
@@ -425,12 +379,6 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
 
     private fun buzz(pattern: LongArray) {
         if (!g.settings.current.vibration) return
-        val vm = ctx.getSystemService(VibratorManager::class.java) ?: return
-        runCatching { vm.defaultVibrator.vibrate(VibrationEffect.createWaveform(pattern, -1)) }
-    }
-
-    /** SOS ignores the vibration setting - it must be felt. */
-    private fun strongBuzz(pattern: LongArray) {
         val vm = ctx.getSystemService(VibratorManager::class.java) ?: return
         runCatching { vm.defaultVibrator.vibrate(VibrationEffect.createWaveform(pattern, -1)) }
     }

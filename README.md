@@ -1,9 +1,12 @@
-# WristRadar V1
+# WristRadar
+
+> **This was just made for fun, so I could text my friend on his watch, lol.** 😄
 
 A private, **fully offline** messenger for smartwatches, by **doktordestrukt (aka ellie)**.
 
-Two Wear OS watches talk **directly over Bluetooth Low Energy**: no internet, Wi-Fi, phone, SIM,
-account, server or cloud. It is built for and tested on the Samsung Galaxy Watch FE, and works on
+Two Wear OS watches talk **directly over Bluetooth Low Energy**: messages never use the internet,
+a phone, SIM, account, server or cloud. (The only online part is the optional update check against
+GitHub releases over Wi-Fi.) It is built for and tested on the Samsung Galaxy Watch FE, and works on
 a watch with no LTE. A Windows PC companion app speaks the same protocol.
 
 > WristRadar is an independent personal project. It is not affiliated with or endorsed by Samsung
@@ -25,6 +28,17 @@ a watch with no LTE. A Windows PC companion app speaks the same protocol.
   records are tampered with or replayed. A device that is refused sees a BLACKBOX screen.
 - **Themes:** 8 built-in themes plus a custom colour picker, with in-app banner notifications
 - **PC companion:** a Windows app (C#/.NET, WinRT Bluetooth) with the same features
+- **Max Range mode:** strongest signal plus Bluetooth 5 long range, and a walk-to-friend screen
+  (steps, metres, miles, walking time)
+- **Chat extras:** blue seen ticks, reactions, replies, edit, delete, pins, search, nudges, streaks
+  and a status/mood
+- **Fun:** draw & send, emoji blasts, rock-paper-scissors, tic-tac-toe, reaction duel, tap code,
+  hide & seek, shared to-do list
+- **Looks:** gradient themes, fonts, round or square buttons
+- **Updates:** new versions arrive from your friend's watch over Bluetooth or from the
+  [GitHub releases](https://github.com/doktordestrukt/WristRadar/releases) over Wi-Fi, keeping all
+  chats. Every update must be signed with the same key.
+- **Watch face:** a tile and a complication showing your friend at a glance
 
 ## Repository layout
 

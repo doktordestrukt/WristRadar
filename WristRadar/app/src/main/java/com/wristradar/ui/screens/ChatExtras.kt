@@ -147,6 +147,8 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "🧹 Tidier" to "SOS removed.",
+        "🔄 GitHub updates" to "Fixed the update check so new versions download on Wi-Fi.",
         "‹ Back button" to "The back key and the ‹ button now go to the previous screen instead of leaving the app.",
         "🔒 Security" to "Tighter checks on updates and shared lists; secret messages removed.",
         "✏️ Draw & send" to "Doodle with your finger and send it as a picture.",
@@ -154,7 +156,6 @@ object WhatsNew {
         "🎮 Games" to "Rock paper scissors, tic-tac-toe and a reaction duel, with scores.",
         "🔥 Streaks" to "Days in a row you've both messaged.",
         "📳 Tap code" to "Send silent vibration patterns.",
-        "🆘 Silent SOS" to "Hold 3 s to make your friend's watch buzz with your distance.",
         "📡 Range alerts" to "A buzz when your friend is about to leave range.",
         "🌡 Hide & seek" to "Warmer / colder screen that buzzes faster as you get close.",
         "📝 Shared to-do" to "One list on both watches.",

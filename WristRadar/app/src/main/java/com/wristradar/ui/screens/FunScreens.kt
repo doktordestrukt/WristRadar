@@ -92,7 +92,6 @@ fun FunMenuScreen(nav: NavHostController) {
         item { WrChip("🌡 Hide & seek", { nav.navigate("hideseek") }, secondary = "Warmer or colder") }
         item { WrChip("📝 Shared to-do list", { nav.navigate("todo") }) }
         item { WrChip("😎 My status", { nav.navigate("mood") }, secondary = g.engine.extras.myMood ?: "Set a mood") }
-        item { WrChip("🆘 SOS", { nav.navigate("sos") }, secondary = "Silent alarm on their watch", danger = true) }
     }
 }
 
@@ -450,65 +449,6 @@ fun TapCodeScreen(nav: NavHostController) {
                 }
             }
             note?.let { Text(it, fontSize = 10.sp, color = p.textDim) }
-        }
-    }
-}
-
-// ------------------------------------------------------------------------------- SOS (silent)
-
-@Composable
-fun SosScreen(nav: NavHostController) {
-    val g = WristRadarApp.graph
-    val p = LocalPalette.current
-    val answered by g.engine.extras.sosAnswered.collectAsState()
-    var progress by remember { mutableStateOf(0f) }
-    var sent by remember { mutableStateOf(false) }
-    var holding by remember { mutableStateOf(false) }
-    LaunchedEffect(holding) {
-        if (!holding) { progress = 0f; return@LaunchedEffect }
-        val start = System.currentTimeMillis()
-        while (holding && !sent) {
-            progress = ((System.currentTimeMillis() - start) / 3000f).coerceAtMost(1f)
-            if (progress >= 1f) { sent = g.engine.extras.sendSos(); holding = false }
-            delay(30)
-        }
-    }
-    Box(Modifier.fillMaxSize().background(p.background), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                Modifier.size(110.dp).clip(CircleShape).background(lerp(Color(0xFF5A0A12), Color(0xFFFF1F3D), progress))
-                    .pointerInput(Unit) { detectTapGestures(onPress = { holding = true; tryAwaitRelease(); holding = false }) },
-                contentAlignment = Alignment.Center,
-            ) { Text(if (sent) "SENT" else "SOS", fontSize = 26.sp, fontWeight = FontWeight.Black, color = Color.White) }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                when { answered -> "✅ They saw it and are coming"; sent -> "Their watch is buzzing…"; else -> "Hold for 3 seconds" },
-                fontSize = 11.sp, color = p.text, textAlign = TextAlign.Center,
-            )
-            Text("Silent - vibration only", fontSize = 9.sp, color = p.textDim)
-        }
-    }
-}
-
-/** Shown on the partner's watch when an SOS arrives. */
-@Composable
-fun SosOverlay(onWalk: () -> Unit) {
-    val g = WristRadarApp.graph
-    val sos by g.engine.extras.sos.collectAsState()
-    val conn by g.engine.connection.collectAsState()
-    if (sos == null) return
-    val t = rememberInfiniteTransition(label = "sos")
-    val a by t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse), label = "a")
-    Box(Modifier.fillMaxSize().background(Color(0xFFB0102A).copy(alpha = a)), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
-            Text("🆘", fontSize = 40.sp)
-            Text("${g.profile.partnerName.value ?: "Your friend"} needs you", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
-            val d = conn.distanceM?.takeIf { conn.phase == Phase.CONNECTED }
-            Text(d?.let { "About ${it.toInt()} m away" } ?: "Distance unknown", fontSize = 12.sp, color = Color.White)
-            Spacer(Modifier.height(8.dp))
-            Text("I'm coming", fontSize = 13.sp, color = Color(0xFFB0102A), fontWeight = FontWeight.Bold,
-                modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Color.White).clickable { g.engine.extras.answerSos(); onWalk() }
-                    .padding(horizontal = 14.dp, vertical = 6.dp))
         }
     }
 }

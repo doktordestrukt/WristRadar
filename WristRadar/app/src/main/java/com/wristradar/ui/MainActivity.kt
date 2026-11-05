@@ -57,7 +57,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /** Screens where swiping right must not close the screen (drawing, games, holding buttons). */
-private val NoSwipeRoutes = setOf("call", "draw", "game", "taps", "sos")
+private val NoSwipeRoutes = setOf("call", "draw", "game", "taps")
 
 /** Small in-memory hand-off between the picker and preview screens. */
 /** Bumped when a call notification is tapped so the call screen opens. */
@@ -188,7 +188,6 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("games") { com.wristradar.ui.screens.GamesScreen(nav) }
         composable("game") { com.wristradar.ui.screens.GameScreen(nav) }
         composable("taps") { com.wristradar.ui.screens.TapCodeScreen(nav) }
-        composable("sos") { com.wristradar.ui.screens.SosScreen(nav) }
         composable("hideseek") { com.wristradar.ui.screens.HideSeekScreen() }
         composable("todo") { com.wristradar.ui.screens.TodoScreen() }
         composable("mood") { com.wristradar.ui.screens.MoodScreen(nav) }
@@ -217,7 +216,6 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     com.wristradar.ui.blackbox.SecurityWarningOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
     com.wristradar.ui.screens.GameInviteOverlay(onOpen = { nav.navigate("game") { launchSingleTop = true } })
     com.wristradar.ui.screens.BlastOverlay()
-    com.wristradar.ui.screens.SosOverlay(onWalk = { nav.navigate("walk") { launchSingleTop = true } })
     BlackboxOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
     }
 }
