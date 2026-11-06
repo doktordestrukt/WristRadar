@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 10
-val wrVersionName = "10.0.0"
-val wrReleaseLabel = "MK10 Eclipse"
+val wrVersionCode = 11
+val wrVersionName = "11.0.0"
+val wrReleaseLabel = "MK11 Overdrive"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.
@@ -31,6 +31,8 @@ android {
         versionCode = wrVersionCode
         versionName = wrVersionName
         buildConfigField("String", "RELEASE_LABEL", "\"$wrReleaseLabel\"")
+        // Watches are ARM only: drop x86 emulator libraries.
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
 
     signingConfigs {
@@ -65,7 +67,12 @@ android {
         buildConfig = true
     }
     packaging {
-        resources.excludes += setOf("META-INF/*.kotlin_module", "META-INF/AL2.0", "META-INF/LGPL2.1")
+        resources.excludes += setOf(
+            "META-INF/*.kotlin_module", "META-INF/AL2.0", "META-INF/LGPL2.1",
+            // BouncyCastle legacy Picnic tables (unused; only ML-KEM is used) - about 1.2 MB
+            "org/bouncycastle/pqc/legacy/**",
+            "DebugProbesKt.bin", "kotlin-tooling-metadata.json",
+        )
     }
 }
 

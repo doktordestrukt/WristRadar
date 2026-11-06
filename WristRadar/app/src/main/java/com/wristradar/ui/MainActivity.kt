@@ -179,7 +179,8 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
             com.wristradar.ui.screens.QuickRepliesNav.go = { nav.navigate("quickreplies") }
             NotificationSettingsScreen()
         }
-        composable("privacy") { PrivacyScreen() }
+        composable("privacy") { PrivacyScreen(nav) }
+        composable("safety") { com.wristradar.ui.screens.SafetyCodeScreen() }
         composable("connection") { ConnectionInfoScreen() }
         composable("about") { AboutScreen() }
         composable("msg/{id}") { com.wristradar.ui.screens.MessageActionsScreen(nav, it.arguments?.getString("id") ?: "") }

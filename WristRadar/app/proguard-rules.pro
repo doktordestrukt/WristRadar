@@ -3,6 +3,7 @@
 -dontwarn javax.annotation.**
 -dontwarn com.google.api.client.**
 -dontwarn org.joda.time.**
--keep class com.google.crypto.tink.** { *; }
+# Only Tink's low-level primitives are used (X25519, Ed25519, HKDF); keep just those.
+-keep class com.google.crypto.tink.subtle.** { *; }
 -keep class com.wristradar.data.db.** { *; }
 -dontwarn org.bouncycastle.**

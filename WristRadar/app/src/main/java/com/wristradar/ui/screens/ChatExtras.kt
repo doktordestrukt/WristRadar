@@ -156,6 +156,8 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "🛡 Emoji safety code" to "Settings › Privacy: compare 8 emojis with your friend in person. If they match, nobody is in the middle.",
+        "⚡ Lighter & faster" to "The app is less than half the size, so updates to your friend's watch send twice as fast.",
         "🔢 Versions fixed" to "Your friend's version now always shows correctly - no more \"on V1\" by mistake.",
         "🔋 Battery saver" to "Bluetooth slows down when you're not using the app and searches gently when your friend is away. Messages still arrive instantly.",
         "✨ Tilt shimmer" to "Tilt your wrist and light slides across the glass, while the background drifts behind it.",

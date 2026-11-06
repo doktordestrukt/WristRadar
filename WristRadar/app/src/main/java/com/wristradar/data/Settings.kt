@@ -170,6 +170,8 @@ data class Settings(
     val glassRipple: Boolean = true,
     /** Glass dims itself from 21:00 to 07:00. */
     val nightTint: Boolean = true,
+    /** Fingerprint of the partner whose emoji safety code was checked in person ("" = not verified). */
+    val safetyVerified: String = "",
 ) {
     val muted: Boolean get() = mutedUntil > System.currentTimeMillis()
 
@@ -227,6 +229,7 @@ class SettingsStore(context: Context) {
             glassMotion = prefs.getBoolean("glass_motion", d.glassMotion),
             glassRipple = prefs.getBoolean("glass_ripple", d.glassRipple),
             nightTint = prefs.getBoolean("night_tint", d.nightTint),
+            safetyVerified = prefs.getString("safety_verified", d.safetyVerified) ?: "",
             chatText = runCatching { TextSize.valueOf(prefs.getString("chat_text", d.chatText.name)!!) }.getOrDefault(d.chatText),
             mutedUntil = prefs.getLong("muted_until", d.mutedUntil),
             quickReplies = prefs.getString("quick_replies", null)?.split('\u001F')?.filter { it.isNotBlank() }?.take(8) ?: d.quickReplies,
@@ -268,6 +271,7 @@ class SettingsStore(context: Context) {
             .putString("quick_replies", s.quickReplies.joinToString("\u001F"))
             .putBoolean("glass", s.liquidGlass).putString("icon_pack", s.iconPack.name).putString("app_icon", s.appIcon.name)
             .putBoolean("glass_motion", s.glassMotion).putBoolean("glass_ripple", s.glassRipple).putBoolean("night_tint", s.nightTint)
+            .putString("safety_verified", s.safetyVerified)
             .apply()
         _state.value = s
     }

@@ -242,7 +242,7 @@ fun NotificationSettingsScreen() {
 }
 
 @Composable
-fun PrivacyScreen() {
+fun PrivacyScreen(nav: NavHostController) {
     val g = WristRadarApp.graph
     val s by g.settings.state.collectAsState()
     val partner by g.trust.partner.collectAsState()
@@ -251,10 +251,16 @@ fun PrivacyScreen() {
     WrScreen {
         item { SectionLabel("Privacy & security") }
         item { WrToggle("Message previews", s.previews, "In notifications") { v -> g.settings.update { it.copy(previews = v) } } }
+        partner?.let { pt ->
+            item {
+                val ok = s.safetyVerified == com.wristradar.crypto.SafetyCode.fingerprint(pt.identityKey)
+                WrChip("Emoji safety code", { nav.navigate("safety") }, secondary = if (ok) "Verified ✓" else "Check it with your friend", primary = !ok, icon = { Icon(Icons.Filled.Lock, null) })
+            }
+        }
         item { KeyValue("Your fingerprint", g.identity.fingerprint()) }
         partner?.let { pt -> item { KeyValue("Partner fingerprint", IdentityManager.fingerprintOf(pt.identityKey)) } }
         item {
-            KeyValue("Encryption", "X25519 + Ed25519 key agreement, AES-256-GCM per message, keys rotate every session")
+            KeyValue("Encryption", "X25519 + ML-KEM-768 (post-quantum) key agreement, Ed25519 identities, AES-256-GCM per message, keys rotate every session")
         }
         item {
             KeyValue("Stored on watch", "Keys and messages encrypted with an Android Keystore key. Nothing leaves the watch except to your partner.")
