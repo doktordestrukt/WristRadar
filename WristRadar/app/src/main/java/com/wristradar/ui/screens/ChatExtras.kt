@@ -156,6 +156,11 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "🎮 3 new games" to "Connect 4, Memory Match and Dice Duel. Your friend needs this version too.",
+        "✍️ Text formatting" to "Like Discord: **bold**, *italic*, __underline__, ~~strike~~ and `code`.",
+        "🙈 Spoilers" to "Wrap words in ||double bars|| - they're hidden until tapped. Notifications hide them too.",
+        "😍 Big emojis" to "Send just 1-3 emojis and they show up big.",
+        "🔄 Update reminders" to "A fresh reminder each time your friend is behind, plus when you each last updated.",
         "📁 Theme folders" to "Themes are now sorted into folders. Settings › Appearance › Themes.",
         "🫧 Soft glass" to "10 new soft liquid glass themes, in their own folder.",
         "🏝 Dynamic Island" to "A pill at the top springs open for calls, typing and when your friend connects or leaves.",

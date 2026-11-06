@@ -26,8 +26,69 @@ import java.util.concurrent.ConcurrentLinkedQueue
 // ------------------------------------------------------------------------------- models
 
 enum class GameKind(val id: Int, val title: String) {
-    RPS(1, "Rock Paper Scissors"), TTT(2, "Tic-Tac-Toe"), DUEL(3, "Reaction Duel");
+    RPS(1, "Rock Paper Scissors"), TTT(2, "Tic-Tac-Toe"), DUEL(3, "Reaction Duel"),
+    C4(4, "Connect 4"), MEMORY(5, "Memory Match"), DICE(6, "Dice Duel");
+    /** First app version (versionCode) that knows this game. */
+    val since: Int get() = if (id >= 4) 13 else 0
     companion object { fun of(id: Int) = entries.firstOrNull { it.id == id } }
+}
+
+/** Pure game rules, shared by both watches (and the unit tests). */
+object GameRules {
+    const val C4_COLS = 7
+    const val C4_ROWS = 6
+    const val MEM_CARDS = 12
+    val MEM_FACES = listOf("🍓", "🌸", "💎", "🦄", "🍩", "🌙")
+
+    fun emptyBoard(kind: GameKind) = List(when (kind) { GameKind.C4 -> C4_COLS * C4_ROWS; GameKind.MEMORY -> MEM_CARDS; else -> 9 }) { 0 }
+
+    /** Row-major, row 0 at the top. Returns the cell a disc lands in, or -1 if the column is full. */
+    fun c4Drop(board: List<Int>, col: Int): Int {
+        if (col !in 0 until C4_COLS) return -1
+        for (row in C4_ROWS - 1 downTo 0) if (board[row * C4_COLS + col] == 0) return row * C4_COLS + col
+        return -1
+    }
+
+    fun c4Winner(b: List<Int>): Int {
+        val dirs = listOf(0 to 1, 1 to 0, 1 to 1, 1 to -1)
+        for (r in 0 until C4_ROWS) for (c in 0 until C4_COLS) {
+            val v = b[r * C4_COLS + c]; if (v == 0) continue
+            for ((dr, dc) in dirs) {
+                var k = 1
+                while (k < 4) {
+                    val rr = r + dr * k; val cc = c + dc * k
+                    if (rr !in 0 until C4_ROWS || cc !in 0 until C4_COLS || b[rr * C4_COLS + cc] != v) break
+                    k++
+                }
+                if (k == 4) return v
+            }
+        }
+        return 0
+    }
+
+    /** Same shuffled deck on both watches, from the game id. Each value is a face index, twice. */
+    fun memDeck(seed: Int): List<Int> = (0 until MEM_CARDS).map { it / 2 }.shuffled(java.util.Random(seed.toLong()))
+
+    /** Dice duel: two dice per player packed as d1*10+d2 (both 1..6). */
+    fun diceSum(v: Int) = v / 10 + v % 10
+    fun validDice(v: Int) = v / 10 in 1..6 && v % 10 in 1..6
+
+    /**
+     * Memory: flip one card. Two face-up cards that match are kept by the player (board = their
+     * mark) and they go again; a mismatch stays visible until the next flip, then the turn passes.
+     */
+    fun memFlip(gs: GameState, card: Int, byStarter: Boolean): GameState? {
+        if (card !in 0 until MEM_CARDS || gs.board.size != MEM_CARDS || gs.board[card] != 0) return null
+        val deck = memDeck(gs.id)
+        val shown = if (gs.flips.size >= 2) emptyList() else gs.flips
+        if (card in shown) return null
+        val flips = shown + card
+        if (flips.size < 2) return gs.copy(flips = flips)
+        val mark = if (byStarter) 1 else 2
+        return if (deck[flips[0]] == deck[flips[1]]) {
+            gs.copy(board = gs.board.toMutableList().also { it[flips[0]] = mark; it[flips[1]] = mark }, flips = emptyList())
+        } else gs.copy(flips = flips, starterTurn = !gs.starterTurn)
+    }
 }
 
 enum class GamePhase { INVITED_ME, WAITING_ACCEPT, PLAYING, COUNTDOWN, GO, DONE }
@@ -45,9 +106,13 @@ data class GameState(
     val goAt: Long = 0,
     /** 1 I won, -1 they won, 0 draw, null not finished. */
     val result: Int? = null,
+    /** MEMORY: whose turn (true = the starter), and the cards face-up right now. */
+    val starterTurn: Boolean = true,
+    val flips: List<Int> = emptyList(),
 ) {
     val myMark get() = if (iStarted) 1 else 2
     val myTurn: Boolean get() {
+        if (kind == GameKind.MEMORY) return starterTurn == iStarted
         val placed = board.count { it != 0 }
         return (placed % 2 == 0) == iStarted
     }
@@ -258,7 +323,7 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
     fun invite(kind: GameKind): Boolean {
         if (engine.currentSession() == null) return false
         val id = (Crypto.random(4).fold(0) { a, b -> (a shl 8) or (b.toInt() and 0xff) }) and 0x7fffffff
-        _game.value = GameState(kind, id, iStarted = true, phase = GamePhase.WAITING_ACCEPT)
+        _game.value = GameState(kind, id, iStarted = true, phase = GamePhase.WAITING_ACCEPT, board = GameRules.emptyBoard(kind))
         gsend(kind, 0, id)
         return true
     }
@@ -291,6 +356,25 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
                 _game.value = settle(gs.copy(board = b))
                 gsend(gs.kind, 2, gs.id, value)
             }
+            GameKind.C4 -> {
+                if (gs.phase != GamePhase.PLAYING || !gs.myTurn) return
+                val cell = GameRules.c4Drop(gs.board, value); if (cell < 0) return
+                _game.value = settle(gs.copy(board = gs.board.toMutableList().also { it[cell] = gs.myMark }))
+                gsend(gs.kind, 2, gs.id, value)
+            }
+            GameKind.MEMORY -> {
+                if (gs.phase != GamePhase.PLAYING || !gs.myTurn) return
+                val next = GameRules.memFlip(gs, value, byStarter = gs.iStarted) ?: return
+                _game.value = settle(next)
+                gsend(gs.kind, 2, gs.id, value)
+            }
+            GameKind.DICE -> {
+                if (gs.phase != GamePhase.PLAYING || gs.mine != null) return
+                val rnd = Crypto.random(2)
+                val roll = ((rnd[0].toInt() and 0xff) % 6 + 1) * 10 + ((rnd[1].toInt() and 0xff) % 6 + 1)
+                _game.value = settle(gs.copy(mine = roll))
+                gsend(gs.kind, 2, gs.id, roll)
+            }
             GameKind.DUEL -> {
                 if (gs.mine != null) return
                 val now = System.currentTimeMillis()
@@ -307,7 +391,7 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
         val gs = _game.value
         when (op) {
             0 -> {
-                _game.value = GameState(kind, id, iStarted = false, phase = GamePhase.INVITED_ME)
+                _game.value = GameState(kind, id, iStarted = false, phase = GamePhase.INVITED_ME, board = GameRules.emptyBoard(kind))
                 buzz(longArrayOf(0, 60, 60, 60))
                 if (!g.uiVisibility.appVisible) g.notifier.showInfo("🎮 ${name()} wants to play", kind.title)
                 else com.wristradar.ui.components.BannerBus.show(name(), "🎮 wants to play ${kind.title}")
@@ -325,6 +409,12 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
                         if (value !in 0..8 || gs.board[value] != 0 || gs.myTurn) gs
                         else settle(gs.copy(board = gs.board.toMutableList().also { it[value] = 3 - gs.myMark }))
                     }
+                    GameKind.C4 -> {
+                        val cell = GameRules.c4Drop(gs.board, value)
+                        if (cell < 0 || gs.myTurn) gs else settle(gs.copy(board = gs.board.toMutableList().also { it[cell] = 3 - gs.myMark }))
+                    }
+                    GameKind.MEMORY -> if (gs.myTurn) gs else GameRules.memFlip(gs, value, byStarter = !gs.iStarted)?.let { settle(it) } ?: gs
+                    GameKind.DICE -> if (GameRules.validDice(value)) settle(gs.copy(theirs = value)) else gs
                     else -> settle(gs.copy(theirs = value))
                 }
             }
@@ -360,6 +450,17 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
                 val w = tttWinner(gs.board)
                 when { w == gs.myMark -> 1; w != 0 -> -1; gs.board.none { it == 0 } -> 0; else -> null }
             }
+            GameKind.C4 -> {
+                val w = GameRules.c4Winner(gs.board)
+                when { w == gs.myMark -> 1; w != 0 -> -1; gs.board.none { it == 0 } -> 0; else -> null }
+            }
+            GameKind.MEMORY -> if (gs.board.any { it == 0 }) null else {
+                val mine = gs.board.count { it == gs.myMark } / 2
+                val theirs = gs.board.count { it != gs.myMark } / 2
+                mine.compareTo(theirs).coerceIn(-1, 1)
+            }
+            GameKind.DICE -> if (gs.mine == null || gs.theirs == null) null
+                else GameRules.diceSum(gs.mine).compareTo(GameRules.diceSum(gs.theirs)).coerceIn(-1, 1)
         }
         if (result == null) return gs
         record(gs.kind, result)

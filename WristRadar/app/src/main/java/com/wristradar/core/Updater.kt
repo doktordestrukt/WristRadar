@@ -119,6 +119,20 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
         }
     }
 
+    private val updPrefs = ctx.getSharedPreferences("wr_upd", Context.MODE_PRIVATE)
+
+    /** When this watch last installed WristRadar (first install or update). */
+    val myUpdatedAt: Long get() = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime }.getOrDefault(0L)
+
+    /** When we first saw the friend on their current version (0 = never seen). */
+    val partnerUpdatedAt: Long get() = updPrefs.getLong("partner_seen_at", 0L)
+
+    private fun notePartnerVersion(code: Int) {
+        if (updPrefs.getInt("partner_code", -1) != code) {
+            updPrefs.edit().putInt("partner_code", code).putLong("partner_seen_at", System.currentTimeMillis()).apply()
+        }
+    }
+
     @Volatile private var gotVersion = false
     @Volatile private var versionReplied = false
 
@@ -165,6 +179,7 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
             A.VERSION -> {
                 val code = r.i(); val label = r.str(20); val platform = if (r.hasMore()) r.b() else PLATFORM_WATCH
                 gotVersion = true
+                notePartnerVersion(code)
                 _state.update { it.copy(partner = PartnerApp(code, label.ifBlank { "V$code" }, platform == PLATFORM_WATCH)) }
                 // Answer once per session, so the friend learns our version even if our first one was lost.
                 if (!versionReplied) { versionReplied = true; sendVersion(s) }

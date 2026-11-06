@@ -192,10 +192,17 @@ fun ChatScreen(nav: NavHostController) {
                     .clickable { nav.navigate("updates") }.padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("${partnerName ?: "Your friend"} is on ${partnerApp.label}", fontSize = 11.sp, color = p.text)
+                val who = partnerName ?: "Your friend"
+                val line = remember(partnerApp.versionCode) { UpdateNudges.random().replace("{name}", who) }
+                Text(line, fontSize = 11.sp, color = p.text, textAlign = TextAlign.Center)
                 Text(
-                    "They can't see newer features yet (" + missingFeatures(partnerApp.versionCode) + "). Tap to update them.",
+                    "$who is on ${partnerApp.label}, you're on ${com.wristradar.BuildConfig.RELEASE_LABEL}. Missing: " + missingFeatures(partnerApp.versionCode) + ". Tap to send the update.",
                     fontSize = 10.sp, color = p.textDim, textAlign = TextAlign.Center,
+                )
+                val up = g.engine.updater
+                Text(
+                    "You updated ${whenAgo(up.myUpdatedAt)}" + (up.partnerUpdatedAt.takeIf { it > 0 }?.let { " · $who's version since ${whenAgo(it)}" } ?: ""),
+                    fontSize = 9.sp, color = p.textDim, textAlign = TextAlign.Center,
                 )
             }
         }
@@ -335,12 +342,38 @@ object ChatReply {
 }
 
 /** Features the partner's older version is missing, for the "please update" placeholder. */
+/** A different "please update" line every time the placeholder appears. */
+val UpdateNudges = listOf(
+    "✨ {name}'s app is behind - time for a glow-up!",
+    "📦 New stuff is waiting for {name}!",
+    "🚀 {name} is missing out - send them the update!",
+    "💅 {name}'s WristRadar needs a little refresh.",
+    "🔄 {name} is on an older version.",
+    "🎁 There's a new version for {name} to unwrap!",
+    "⏳ {name} is living in the past - update them!",
+    "🫧 {name} can't see the newest bits yet.",
+)
+
+/** "today 14:05", "yesterday", "3 days ago" or a date. */
+fun whenAgo(t: Long): String {
+    if (t <= 0) return "a while ago"
+    val days = ((System.currentTimeMillis() - t) / 86_400_000L).toInt()
+    val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(t))
+    return when {
+        days <= 0 -> "today $time"
+        days == 1 -> "yesterday"
+        days < 7 -> "$days days ago"
+        else -> java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(java.util.Date(t))
+    }
+}
+
 fun missingFeatures(partnerVersion: Int): String {
     val f = mutableListOf<String>()
     if (partnerVersion < 2) f += listOf("blue ticks", "reactions", "replies", "edits")
     if (partnerVersion < 3) f += listOf("nudges", "Bluetooth updates")
     if (partnerVersion < 4) f += listOf("games", "emoji blasts", "tap code", "status")
     if (partnerVersion < 8) f += listOf("profile banners", "profile effects")
+    if (partnerVersion < 13) f += listOf("Connect 4", "Memory Match", "Dice Duel", "text formatting & spoilers")
     return f.joinToString(", ")
 }
 
@@ -400,6 +433,8 @@ private fun MessageBubble(
         horizontalAlignment = if (m.outgoing) Alignment.End else Alignment.Start,
     ) {
         val glassOn = com.wristradar.ui.theme.LocalGlass.current.on
+        val hasSpoiler = !m.isImage && com.wristradar.ui.components.RichText.hasSpoiler(m.text)
+        var reveal by remember(m.id) { mutableStateOf(false) }
         Box(
             Modifier.widthIn(max = 150.dp).let {
                 if (glassOn) it.then(Modifier.glass(shape, tint = if (m.outgoing) p.primary else Color.White, strength = if (m.outgoing) 1.6f else 1f))
@@ -407,7 +442,8 @@ private fun MessageBubble(
             }
                 .combinedClickable(
                     onClick = {
-                        if (m.status == MsgStatus.FAILED && m.outgoing) onRetry()
+                        if (hasSpoiler) reveal = !reveal
+                        else if (m.status == MsgStatus.FAILED && m.outgoing) onRetry()
                         else if (m.isImage && !m.isAudio) onImage()
                     },
                     onLongClick = onLongPress,
@@ -424,7 +460,13 @@ private fun MessageBubble(
                             .background(Color.Black.copy(alpha = 0.18f)).padding(horizontal = 5.dp, vertical = 2.dp),
                     )
                 }
-                if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else Text(m.text, color = textColor, fontSize = WristRadarApp.graph.settings.state.collectAsState().value.chatText.sp.sp)
+                if (m.isAudio) AudioContent(m) else if (m.isImage) ImageContent(m) else {
+                    val size = WristRadarApp.graph.settings.state.collectAsState().value.chatText.sp
+                    val rt = com.wristradar.ui.components.RichText
+                    if (rt.isJumboEmoji(m.text)) Text(m.text.trim(), fontSize = 30.sp)
+                    else if (rt.hasFormatting(m.text)) Text(remember(m.text, reveal, textColor) { rt.format(m.text, textColor, reveal) }, color = textColor, fontSize = size.sp)
+                    else Text(m.text, color = textColor, fontSize = size.sp)
+                }
             }
         }
         val reacts = listOfNotNull(m.reactTheirs, m.reactMine)

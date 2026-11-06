@@ -253,9 +253,12 @@ fun GamesScreen(nav: NavHostController) {
         GameKind.entries.forEach { k ->
             item(key = k.name) {
                 val sc = g.engine.extras.score(k)
+                val partnerCode = g.engine.updater.state.collectAsState().value.partner?.versionCode
+                val tooOld = partnerCode != null && partnerCode < k.since
                 WrChip(k.title, {
-                    if (g.engine.extras.invite(k)) nav.navigate("game") else note = "Connect to your friend first"
-                }, secondary = "W ${sc.wins} · L ${sc.losses} · D ${sc.draws}")
+                    if (tooOld) note = "Your friend needs to update to play ${k.title}. Settings › Updates › Send to friend."
+                    else if (g.engine.extras.invite(k)) nav.navigate("game") else note = "Connect to your friend first"
+                }, secondary = if (tooOld) "🔒 Friend needs to update" else "W ${sc.wins} · L ${sc.losses} · D ${sc.draws}")
             }
         }
         note?.let { item { Hint(it) } }
@@ -291,6 +294,9 @@ fun GameScreen(nav: NavHostController) {
                     GameKind.RPS -> RpsBody(s, name)
                     GameKind.TTT -> TttBody(s, name)
                     GameKind.DUEL -> DuelBody(s, name)
+                    GameKind.C4 -> C4Body(s, name)
+                    GameKind.MEMORY -> MemoryBody(s, name)
+                    GameKind.DICE -> DiceBody(s, name)
                 }
             }
             if (s.phase == GamePhase.DONE) {

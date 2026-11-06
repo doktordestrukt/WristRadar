@@ -163,7 +163,8 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         if (isNew) onIncoming(entity, text)
     }
 
-    private suspend fun onIncoming(e: MessageEntity, preview: String) {
+    private suspend fun onIncoming(e: MessageEntity, rawPreview: String) {
+        val preview = com.wristradar.ui.components.RichText.plain(rawPreview)
         com.wristradar.glance.Glance.refresh(engine.ctx)
         if (g.uiVisibility.chatVisible) {
             sendSeen(g.messages.markAllRead())
