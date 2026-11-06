@@ -119,10 +119,37 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
         }
     }
 
-    suspend fun onSessionUp(s: SecureSession) {
+    @Volatile private var gotVersion = false
+    @Volatile private var versionReplied = false
+
+    /**
+     * Called synchronously when a session comes up, BEFORE its inbox starts being read, so the
+     * friend's VERSION can never be overwritten by a placeholder (the old "you're on V1" bug).
+     */
+    fun prepareSession() {
         offeredThisSession = false
-        _state.update { it.copy(partner = PartnerApp(1, "V1", true)) }   // old apps never send VERSION
-        s.send(A.VERSION, Out().i(myCode).str(BuildConfig.RELEASE_LABEL).b(PLATFORM_WATCH).build())
+        gotVersion = false
+        versionReplied = false
+        _state.update { it.copy(partner = null) }   // unknown until VERSION arrives
+    }
+
+    suspend fun onSessionUp(s: SecureSession) {
+        sendVersion(s)
+        // The first VERSION can be lost if the other watch is still finishing its handshake.
+        // Resend a couple of times; only if nothing ever comes back is the friend really on V1.
+        engine.scope.launch {
+            for (wait in longArrayOf(3_000, 6_000, 10_000)) {
+                delay(wait)
+                if (gotVersion || engine.currentSession() !== s) return@launch
+                sendVersion(s)
+            }
+            delay(5_000)
+            if (!gotVersion && engine.currentSession() === s) _state.update { it.copy(partner = PartnerApp(1, "V1", true)) }   // V1 never sends VERSION
+        }
+    }
+
+    private suspend fun sendVersion(s: SecureSession) {
+        runCatching { s.send(A.VERSION, Out().i(myCode).str(BuildConfig.RELEASE_LABEL).b(PLATFORM_WATCH).build()) }
     }
 
     fun onSessionDown() {
@@ -137,7 +164,10 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
         when (type) {
             A.VERSION -> {
                 val code = r.i(); val label = r.str(20); val platform = if (r.hasMore()) r.b() else PLATFORM_WATCH
-                _state.update { it.copy(partner = PartnerApp(code, label, platform == PLATFORM_WATCH)) }
+                gotVersion = true
+                _state.update { it.copy(partner = PartnerApp(code, label.ifBlank { "V$code" }, platform == PLATFORM_WATCH)) }
+                // Answer once per session, so the friend learns our version even if our first one was lost.
+                if (!versionReplied) { versionReplied = true; sendVersion(s) }
                 if (platform == PLATFORM_WATCH && code in 2 until myCode && g.settings.current.autoSendUpdates) offer(s)
             }
             A.UPD_OFFER -> {
@@ -179,7 +209,7 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
     /** Manual "Send update to friend" (also used automatically on reconnect). */
     fun sendToPartner(): String {
         val s = engine.currentSession() ?: return "Not connected to your friend"
-        val pa = _state.value.partner ?: return "Not connected to your friend"
+        val pa = _state.value.partner ?: return "Checking your friend's version - try again in a few seconds"
         if (!pa.isWatch) return "Your friend is on the PC app"
         if (pa.versionCode < 2) return "Your friend is on V1 - install V2 on their watch by hand once"
         if (pa.versionCode >= myCode) return "Your friend already has ${pa.label}"

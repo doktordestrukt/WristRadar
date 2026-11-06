@@ -159,6 +159,9 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     private var refreshDeadline = 0L
     private var failedAt = 0L
     private var lastStatusSent = 0L
+    /** When the current search for the partner began (0 = connected / not searching). */
+    private var searchingSince = 0L
+    private var linkPriority = -1
     private var tokenWindow = -1L
     private var partnerTokens: List<ByteArray> = emptyList()
     private var randomToken = Crypto.random(8)
@@ -256,6 +259,10 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         val partner = g.trust.partner.value
         val connected = currentSession() != null
         val t = now()
+        // Battery: search hard for the first 2 minutes (or while boosted), then drop to low power.
+        // A low-power scan still finds the friend - just a few seconds slower.
+        if (connected || partner == null) searchingSince = 0L else if (searchingSince == 0L) searchingSince = t
+        val searchingLong = searchingSince != 0L && t - searchingSince > SEARCH_HARD_MS
         val wantAdvert = discoveryActive || pairing.state.value.active || (partner != null && !connected)
         if (wantAdvert) {
             val window = AdvertPayload.currentWindow(t)
@@ -274,7 +281,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             val range = g.settings.current.range
             val mode = when {
                 discoveryActive || t < boostUntil -> AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
-                range == RangeMode.MAX -> AdvertiseSettings.ADVERTISE_MODE_BALANCED   // found faster from far away
+                range == RangeMode.MAX && !searchingLong -> AdvertiseSettings.ADVERTISE_MODE_BALANCED   // found faster from far away
                 else -> AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
             }
             advertiser.update(payload, mode, range, g.profile.myName.value) { ok, err -> if (!ok) Log.w(TAG, "advertise: $err") }
@@ -284,7 +291,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             discoveryActive -> ScanSettings.SCAN_MODE_LOW_LATENCY
             partner != null && !connected -> when {
                 t < boostUntil -> ScanSettings.SCAN_MODE_LOW_LATENCY
-                g.settings.current.range == RangeMode.MAX -> ScanSettings.SCAN_MODE_BALANCED
+                g.settings.current.range == RangeMode.MAX && !searchingLong -> ScanSettings.SCAN_MODE_BALANCED
                 else -> ScanSettings.SCAN_MODE_LOW_POWER
             }
             else -> null
@@ -403,6 +410,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         setPhase(Phase.CONNECTED, "End-to-end encrypted")
         applyRadio()
         WristRadarService.start(ctx)
+        updater.prepareSession()
         scope.launch {
             for (m in s.inbox) {
                 if (m.isEmpty()) continue
@@ -570,7 +578,15 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             s.close()
             return
         }
-        if (s != null && t - lastStatusSent > STATUS_MS) {
+        // Battery: chat at full speed while the app is open or you're actively talking, otherwise
+        // stretch the Bluetooth connection interval and send status less often.
+        val active = g.uiVisibility.appVisible || calls.state.value.live || messenger.busy || t - lastActivity < ACTIVE_MS
+        (s?.link as? ClientLink)?.let { cl ->
+            val want = if (active) android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_BALANCED else android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER
+            if (want != linkPriority && !messenger.busy) { linkPriority = want; cl.setPriority(want) }
+        }
+        if (s == null || messenger.busy) linkPriority = -1   // a transfer sets its own priority; re-apply after
+        if (s != null && t - lastStatusSent > (if (active) STATUS_MS else STATUS_IDLE_MS)) {
             lastStatusSent = t
             scope.launch {
                 val rssi = (s.link as? ClientLink)?.readRssi()
@@ -754,6 +770,9 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         private const val TAG = "WristRadar"
         private const val TICK_MS = 5_000L
         private const val STATUS_MS = 15_000L
+        private const val STATUS_IDLE_MS = 45_000L
+        private const val ACTIVE_MS = 60_000L
+        private const val SEARCH_HARD_MS = 120_000L
         private const val BOOST_MS = 60_000L
         private const val RENEW_MS = 3 * 60 * 60 * 1000L
         val REQUIRED_PERMISSIONS = arrayOf(

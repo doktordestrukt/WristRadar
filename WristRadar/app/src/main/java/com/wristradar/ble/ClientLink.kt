@@ -71,6 +71,8 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
         }
     }
 
+    fun setPriority(priority: Int) { runCatching { gatt?.requestConnectionPriority(priority) } }
+
     fun setHighPriority(high: Boolean) {
         gatt?.requestConnectionPriority(
             if (high) BluetoothGatt.CONNECTION_PRIORITY_HIGH else BluetoothGatt.CONNECTION_PRIORITY_BALANCED

@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 9
-val wrVersionName = "9.0.0"
-val wrReleaseLabel = "MK9 Prism"
+val wrVersionCode = 10
+val wrVersionName = "10.0.0"
+val wrReleaseLabel = "MK10 Eclipse"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.
