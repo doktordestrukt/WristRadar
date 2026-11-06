@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 11
-val wrVersionName = "11.0.0"
-val wrReleaseLabel = "MK11 Overdrive"
+val wrVersionCode = 12
+val wrVersionName = "12.0.0"
+val wrReleaseLabel = "MK12 Velvet"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.
@@ -62,6 +62,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    // The app is English-only: drop library translations for other languages (~300 KB).
+    androidResources { localeFilters += listOf("en") }
     buildFeatures {
         compose = true
         buildConfig = true

@@ -97,6 +97,17 @@ object ThemePresets {
         glass("glass_cherry", "Cherry Glass", 0xFFFFFFFF, 0xFFFFC2CB, 0xFFFF6B81, 0x8C9E1430, 0xFF7CFFC4, 0xFF1A0006, 0xFF6E0A1E, 0xFFC7213F),
         glass("glass_ocean", "Ocean Glass", 0xFFFFFFFF, 0xFFBFF4FF, 0xFF4FD1FF, 0x8C0E6A9E, 0xFF7CFFC4, 0xFF001A2E, 0xFF045A8D, 0xFF1AA6C9),
         glass("glass_gold", "Champagne Glass", 0xFF3A2A10, 0xFF8A6214, 0xFFC99A3E, 0x8CB78A3A, 0xFF16865A, 0xFFFFF4DF, 0xFFEFD3A0, 0xFFC9A061),
+        // ---- soft glass
+        glass("soft_blush", "Blush Glass", 0xFF4A1F2E, 0xFFB8476B, 0xFFE07A9A, 0x8CC7577A, 0xFF0E8C5A, 0xFFFFE9EF, 0xFFF7C6D3, 0xFFE89AB2),
+        glass("soft_cotton", "Cotton Candy Glass", 0xFF3A2550, 0xFF9B59D0, 0xFFF08BC0, 0x8CA77BD6, 0xFF0E8C5A, 0xFFFFD6E8, 0xFFE3D4FF, 0xFFB8E1FF),
+        glass("soft_strawberry", "Strawberry Milk Glass", 0xFF5A1E2C, 0xFFD94A72, 0xFFFF8FAB, 0x8CD9577C, 0xFF0E8C5A, 0xFFFFF1F3, 0xFFFFC9D6, 0xFFFF9EB5),
+        glass("soft_lavender", "Lavender Haze Glass", 0xFF2E2350, 0xFF6F55C8, 0xFFA88BEB, 0x8C7A62CF, 0xFF0E8C5A, 0xFFEEE6FF, 0xFFD2C2F5, 0xFFA894E0),
+        glass("soft_sakura", "Sakura Glass", 0xFF4D1D33, 0xFFC2457A, 0xFFEB86AE, 0x8CC75B8A, 0xFF0E8C5A, 0xFFFFF0F5, 0xFFF9D3E3, 0xFFF2A7C3),
+        glass("soft_rosegold", "Rose Gold Glass", 0xFF4A2620, 0xFFA35A4A, 0xFFD9917A, 0x8CA8604F, 0xFF0E8C5A, 0xFFF8E1D6, 0xFFE8B4A0, 0xFFB97A6E),
+        glass("soft_coral", "Coral Dream Glass", 0xFF4A1E1A, 0xFFC9504A, 0xFFF28D7E, 0x8CD0605A, 0xFF0E8C5A, 0xFFFFE5DC, 0xFFFFB8A3, 0xFFF2858F),
+        glass("soft_moonstone", "Moonstone Glass", 0xFF1F2550, 0xFF4F5BC0, 0xFF8C93E6, 0x8C5C66CC, 0xFF0E8C5A, 0xFFE8EEFF, 0xFFC9C9F2, 0xFF9FA6E0),
+        glass("soft_bubblegum", "Bubblegum Glass", 0xFFFFFFFF, 0xFFFFE3F1, 0xFFFFC2E0, 0x8CB83A7A, 0xFF7CFFC4, 0xFFFFB3D9, 0xFFFF85C0, 0xFFE0569E),
+        glass("soft_peony", "Peony Night Glass", 0xFFFFFFFF, 0xFFFFC2E4, 0xFFFF8CC8, 0x8C9E2E70, 0xFF7CFFC4, 0xFF2A0B24, 0xFF6B1F55, 0xFFC04C8E),
         ThemePreset("midnight", "Midnight Purple", ThemeColors(c(0xFFB266FF), c(0xFF7A3DCC), c(0xFF000000), c(0xFF16121C), c(0xFFEDE7F6), c(0xFF1E1A26), c(0xFF4A2380), c(0xFF39FF88))),
         ThemePreset("neon", "Neon Green", ThemeColors(c(0xFF39FF14), c(0xFF1FAA59), c(0xFF000000), c(0xFF0F1A10), c(0xFFE8FFE8), c(0xFF132015), c(0xFF1E5C1A), c(0xFF39FF14))),
         ThemePreset("cyber", "Cyber Blue", ThemeColors(c(0xFF00B3FF), c(0xFF3D5AFE), c(0xFF000000), c(0xFF0D1520), c(0xFFE3F2FD), c(0xFF111C2A), c(0xFF0D3C73), c(0xFF00E5FF))),
@@ -170,6 +181,10 @@ data class Settings(
     val glassRipple: Boolean = true,
     /** Glass dims itself from 21:00 to 07:00. */
     val nightTint: Boolean = true,
+    /** iPhone-style pill at the top for calls, typing and connect/disconnect. */
+    val dynamicIsland: Boolean = true,
+    /** Tiny tap feedback on buttons. */
+    val haptics: Boolean = true,
     /** Fingerprint of the partner whose emoji safety code was checked in person ("" = not verified). */
     val safetyVerified: String = "",
 ) {
@@ -229,6 +244,8 @@ class SettingsStore(context: Context) {
             glassMotion = prefs.getBoolean("glass_motion", d.glassMotion),
             glassRipple = prefs.getBoolean("glass_ripple", d.glassRipple),
             nightTint = prefs.getBoolean("night_tint", d.nightTint),
+            dynamicIsland = prefs.getBoolean("island", d.dynamicIsland),
+            haptics = prefs.getBoolean("haptics", d.haptics),
             safetyVerified = prefs.getString("safety_verified", d.safetyVerified) ?: "",
             chatText = runCatching { TextSize.valueOf(prefs.getString("chat_text", d.chatText.name)!!) }.getOrDefault(d.chatText),
             mutedUntil = prefs.getLong("muted_until", d.mutedUntil),
@@ -271,6 +288,7 @@ class SettingsStore(context: Context) {
             .putString("quick_replies", s.quickReplies.joinToString("\u001F"))
             .putBoolean("glass", s.liquidGlass).putString("icon_pack", s.iconPack.name).putString("app_icon", s.appIcon.name)
             .putBoolean("glass_motion", s.glassMotion).putBoolean("glass_ripple", s.glassRipple).putBoolean("night_tint", s.nightTint)
+            .putBoolean("island", s.dynamicIsland).putBoolean("haptics", s.haptics)
             .putString("safety_verified", s.safetyVerified)
             .apply()
         _state.value = s

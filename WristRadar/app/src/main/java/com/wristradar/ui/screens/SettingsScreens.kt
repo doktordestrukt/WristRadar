@@ -373,8 +373,28 @@ fun AppearanceScreen(nav: NavHostController) {
     val s by g.settings.state.collectAsState()
     WrScreen {
         item { SectionLabel("Appearance") }
-        item { SectionLabel("Liquid glass themes") }
-        ThemePresets.all.filter { it.glass }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
+        item { SectionLabel("Themes") }
+        ThemeFolder.entries.forEach { f ->
+            item(key = "folder-" + f.name) {
+                val list = f.themes()
+                val active = list.any { it.id == s.themeId }
+                WrChip(
+                    "📁 " + f.title, { nav.navigate("themes/" + f.name) },
+                    secondary = if (active) "${list.size} themes · current theme is here" else "${list.size} themes",
+                    primary = active,
+                    icon = { list.firstOrNull()?.gradient?.let { gr -> Box(Modifier.size(22.dp).clip(androidx.compose.foundation.shape.CircleShape).background(androidx.compose.ui.graphics.Brush.linearGradient(gr.map { Color(it) }))) } },
+                    tile = false,
+                )
+            }
+        }
+        item {
+            WrChip(
+                "Custom theme", { g.settings.update { it.copy(themeId = ThemePresets.CUSTOM_ID) }; nav.navigate("custom") },
+                secondary = if (s.themeId == ThemePresets.CUSTOM_ID) "Active · edit colours" else "Pick your own colours",
+                icon = { Swatch(Color(s.custom.primary), 18.dp, selected = s.themeId == ThemePresets.CUSTOM_ID) },
+            )
+        }
+        item { SectionLabel("Effects") }
         item { WrToggle("Liquid glass effect", s.liquidGlass, "Frosted glass buttons and bubbles on every theme") { v -> g.settings.update { it.copy(liquidGlass = v) } } }
         if (s.liquidGlass) {
             item { WrToggle("Tilt shimmer", s.glassMotion, "Light slides across the glass as you tilt your wrist") { v -> g.settings.update { it.copy(glassMotion = v) } } }
@@ -405,17 +425,8 @@ fun AppearanceScreen(nav: NavHostController) {
                 secondary = s.buttonShape.label + " (tap to change)")
         }
         item { WrToggle("Gradient buttons", s.buttonGradient, "Colour fade on every button") { v -> g.settings.update { it.copy(buttonGradient = v) } } }
-        item { SectionLabel("Gradient themes") }
-        ThemePresets.all.filter { it.gradient != null && !it.glass }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
-        item { SectionLabel("Dark themes") }
-        ThemePresets.all.filter { it.gradient == null }.forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
-        item {
-            WrChip(
-                "Custom theme", { g.settings.update { it.copy(themeId = ThemePresets.CUSTOM_ID) }; nav.navigate("custom") },
-                secondary = if (s.themeId == ThemePresets.CUSTOM_ID) "Active · edit colours" else "Pick your own colours",
-                icon = { Swatch(Color(s.custom.primary), 18.dp, selected = s.themeId == ThemePresets.CUSTOM_ID) },
-            )
-        }
+        item { WrToggle("Dynamic Island", s.dynamicIsland, "Pill at the top for calls, typing and connections") { v -> g.settings.update { it.copy(dynamicIsland = v) } } }
+        item { WrToggle("Haptic taps", s.haptics, "A tiny tick when you tap a button") { v -> g.settings.update { it.copy(haptics = v) } } }
         item {
             val next = when (s.animations) { AnimationLevel.FULL -> AnimationLevel.REDUCED; AnimationLevel.REDUCED -> AnimationLevel.OFF; AnimationLevel.OFF -> AnimationLevel.FULL }
             WrChip("Animations", { g.settings.update { it.copy(animations = next) } }, secondary = s.animations.name.lowercase().replaceFirstChar { it.uppercase() } + " (tap to change)")
@@ -476,6 +487,30 @@ private fun IconPackRow(current: com.wristradar.data.IconPack, onPick: (com.wris
             }
         }
         Text(current.label, fontSize = 11.sp, color = p.textDim)
+    }
+}
+
+/** Theme folders on the Appearance screen. */
+enum class ThemeFolder(val title: String) {
+    GLASS("Liquid glass"), SOFT("Soft glass"), GRADIENT("Gradients"), DARK("Dark");
+    fun themes() = ThemePresets.all.filter {
+        when (this) {
+            GLASS -> it.glass && !it.id.startsWith("soft_")
+            SOFT -> it.glass && it.id.startsWith("soft_")
+            GRADIENT -> it.gradient != null && !it.glass
+            DARK -> it.gradient == null
+        }
+    }
+}
+
+@Composable
+fun ThemeFolderScreen(folder: String) {
+    val g = WristRadarApp.graph
+    val s by g.settings.state.collectAsState()
+    val f = ThemeFolder.entries.firstOrNull { it.name == folder } ?: ThemeFolder.GLASS
+    WrScreen {
+        item { SectionLabel(f.title) }
+        f.themes().forEach { preset -> item(key = preset.id) { ThemeChip(preset, s.themeId == preset.id) { g.settings.update { it.copy(themeId = preset.id) } } } }
     }
 }
 

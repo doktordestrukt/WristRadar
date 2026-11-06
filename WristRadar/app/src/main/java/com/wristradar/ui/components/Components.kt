@@ -226,8 +226,12 @@ fun WrChip(
         danger -> ChipDefaults.chipColors(backgroundColor = p.danger.copy(alpha = 0.22f), contentColor = p.danger)
         else -> ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text, secondaryContentColor = p.textDim, iconColor = p.primary)
     }
+    val view = androidx.compose.ui.platform.LocalView.current
     Chip(
-        onClick = onClick,
+        onClick = {
+            if (com.wristradar.WristRadarApp.graph.settings.current.haptics) view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            onClick()
+        },
         enabled = enabled,
         label = { Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (primary) FontWeight.Bold else FontWeight.Normal) },
         secondaryLabel = secondary?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 11.sp) } },

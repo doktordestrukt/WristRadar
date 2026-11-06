@@ -62,12 +62,12 @@ fun TiltSensor(enabled: Boolean) {
                 val tx = (-e.values[0] / 6f).coerceIn(-1f, 1f)
                 val ty = (e.values[1] / 6f).coerceIn(-1f, 1f)
                 // low-pass so the gleam glides instead of jittering
-                GlassFx.tiltX += (tx - GlassFx.tiltX) * 0.15f
-                GlassFx.tiltY += (ty - GlassFx.tiltY) * 0.15f
+                GlassFx.tiltX += (tx - GlassFx.tiltX) * 0.08f
+                GlassFx.tiltY += (ty - GlassFx.tiltY) * 0.08f
             }
             override fun onAccuracyChanged(s: Sensor?, a: Int) = Unit
         }
-        if (acc != null) sm.registerListener(l, acc, SensorManager.SENSOR_DELAY_UI)
+        if (acc != null) sm.registerListener(l, acc, SensorManager.SENSOR_DELAY_GAME)
         onDispose { sm.unregisterListener(l) }
     }
 }

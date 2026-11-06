@@ -81,7 +81,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by WristRadarApp.graph.settings.state.collectAsState()
             WristRadarTheme(settings) {
-                WrNav(openChatSignal, ::requestPermissions)
+                androidx.compose.foundation.layout.Box {
+                    WrNav(openChatSignal, ::requestPermissions)
+                    if (settings.dynamicIsland) com.wristradar.ui.components.DynamicIsland()
+                }
             }
         }
     }
@@ -170,6 +173,7 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("partner") { PartnerProfileScreen() }
         composable("settings") { SettingsScreen(nav) }
         composable("appearance") { AppearanceScreen(nav) }
+        composable("themes/{folder}") { com.wristradar.ui.screens.ThemeFolderScreen(it.arguments?.getString("folder") ?: "GLASS") }
         composable("custom") { CustomThemeScreen(nav) }
         composable("color/{slot}") {
             val slot = runCatching { ColorSlot.valueOf(it.arguments?.getString("slot") ?: "") }.getOrDefault(ColorSlot.PRIMARY)

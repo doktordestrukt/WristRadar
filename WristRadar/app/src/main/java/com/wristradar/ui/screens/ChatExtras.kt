@@ -156,6 +156,12 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "📁 Theme folders" to "Themes are now sorted into folders. Settings › Appearance › Themes.",
+        "🫧 Soft glass" to "10 new soft liquid glass themes, in their own folder.",
+        "🏝 Dynamic Island" to "A pill at the top springs open for calls, typing and when your friend connects or leaves.",
+        "✓ Delivered / Read" to "Your last message says Delivered or Read, like iMessage.",
+        "📳 Haptic taps" to "A tiny tick when you tap a button.",
+        "🧈 Smoother" to "The app is compiled ahead of time when it installs, so scrolling is smooth from the first swipe.",
         "🛡 Emoji safety code" to "Settings › Privacy: compare 8 emojis with your friend in person. If they match, nobody is in the middle.",
         "⚡ Lighter & faster" to "The app is less than half the size, so updates to your friend's watch send twice as fast.",
         "🔢 Versions fixed" to "Your friend's version now always shows correctly - no more \"on V1\" by mistake.",

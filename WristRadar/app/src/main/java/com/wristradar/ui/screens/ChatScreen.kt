@@ -201,6 +201,7 @@ fun ChatScreen(nav: NavHostController) {
         }
         if (list != null && list.isEmpty()) item { Hint("No messages yet. Say hi 👋") }
         val byId = list?.associateBy { it.id }.orEmpty()
+        val lastOutId = list?.lastOrNull { it.outgoing && !it.isInfo && !it.isAlert }?.id
         var lastDay: java.time.LocalDate? = null
         list?.forEach { m ->
             val day = java.time.Instant.ofEpochMilli(m.localTime).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
@@ -218,6 +219,7 @@ fun ChatScreen(nav: NavHostController) {
                     onImage = { nav.navigate("image/${m.id}") },
                     onRetry = { scope.launch { g.engine.messenger.retry(m.id) } },
                     quoted = m.replyTo?.let { byId[it] },
+                    lastOut = m.id == lastOutId,
                     onLongPress = { nav.navigate("msg/${m.id}") },
                     onReactTap = { e -> scope.launch { g.engine.messenger.react(m.id, e) } },
                     onDoubleTap = { if (!m.isAlert && !m.isInfo) scope.launch { g.engine.messenger.react(m.id, "❤️") } },
@@ -356,6 +358,7 @@ private fun MessageBubble(
     m: ChatMessage, animateIn: Boolean, onImage: () -> Unit, onRetry: () -> Unit,
     quoted: ChatMessage? = null, onLongPress: () -> Unit = {}, onReactTap: (String) -> Unit = {},
     onDoubleTap: () -> Unit = {},
+    lastOut: Boolean = false,
 ) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
@@ -443,8 +446,8 @@ private fun MessageBubble(
         val status = if (!m.outgoing) "" else when (m.status) {
             MsgStatus.PENDING -> " · sending"
             MsgStatus.TRANSFERRING -> " · ${m.progress}%"
-            MsgStatus.DELIVERED -> " · ✓✓"
-            MsgStatus.SEEN -> " · ✓✓"
+            MsgStatus.DELIVERED -> if (lastOut) " · Delivered ✓✓" else " · ✓✓"
+            MsgStatus.SEEN -> if (lastOut) " · Read ✓✓" else " · ✓✓"
             MsgStatus.FAILED -> " · failed, tap to retry"
             else -> ""
         }

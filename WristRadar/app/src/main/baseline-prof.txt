@@ -1,0 +1,16 @@
+# Ahead-of-time compile the app and its UI toolkit at install, so scrolling and screen
+# changes are smooth from the first use (sideloaded apps get no Play Store profiles).
+HSPLcom/wristradar/**->**(**)**
+Lcom/wristradar/**;
+HSPLandroidx/compose/runtime/**->**(**)**
+Landroidx/compose/runtime/**;
+HSPLandroidx/compose/ui/**->**(**)**
+Landroidx/compose/ui/**;
+HSPLandroidx/compose/foundation/**->**(**)**
+Landroidx/compose/foundation/**;
+HSPLandroidx/compose/animation/**->**(**)**
+Landroidx/compose/animation/**;
+HSPLandroidx/wear/compose/**->**(**)**
+Landroidx/wear/compose/**;
+HSPLkotlinx/coroutines/**->**(**)**
+Lkotlinx/coroutines/**;
