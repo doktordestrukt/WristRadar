@@ -55,7 +55,11 @@ private const val INPUT_KEY = "wr_text"
 fun rememberTextInput(onClosed: () -> Unit = {}, onText: (String) -> Unit): (String) -> Unit {
     val cb by rememberUpdatedState(onText)
     val closed by rememberUpdatedState(onClosed)
+    // Guard against double launches: opening the system keyboard twice (double tap, or a tap while
+    // the last one is still closing) is what shows a blank black screen on some Wear watches.
+    val busy = androidx.compose.runtime.remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        busy.set(android.os.SystemClock.uptimeMillis() - KEYBOARD_COOLDOWN_MS + 400)   // short cool-down after closing
         closed()
         val data: Intent = res.data ?: return@rememberLauncherForActivityResult
         val text = RemoteInput.getResultsFromIntent(data)?.getCharSequence(INPUT_KEY)?.toString()
@@ -71,6 +75,13 @@ fun rememberTextInput(onClosed: () -> Unit = {}, onText: (String) -> Unit): (Str
             }
             .build()
         RemoteInputIntentHelper.putRemoteInputsExtra(intent, listOf(input))
-        runCatching { launcher.launch(intent) }
+        val now = android.os.SystemClock.uptimeMillis()
+        val last = busy.get()
+        if (now - last >= KEYBOARD_COOLDOWN_MS && busy.compareAndSet(last, now)) {
+            if (runCatching { launcher.launch(intent) }.isFailure) busy.set(0L)
+        }
     }
 }
+
+/** A launch blocks new ones for this long (cleared early when the keyboard returns). */
+private const val KEYBOARD_COOLDOWN_MS = 1_500L

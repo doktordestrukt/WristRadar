@@ -156,6 +156,8 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "🛟 Stuck messages fixed" to "Messages no longer get stuck on \"sending\" - a dead connection is noticed within seconds and reconnects by itself.",
+        "⌨️ Keyboard fix" to "Fixed the black screen that sometimes appeared instead of the keyboard.",
         "🎮 3 new games" to "Connect 4, Memory Match and Dice Duel. Your friend needs this version too.",
         "✍️ Text formatting" to "Like Discord: **bold**, *italic*, __underline__, ~~strike~~ and `code`.",
         "🙈 Spoilers" to "Wrap words in ||double bars|| - they're hidden until tapped. Notifications hide them too.",

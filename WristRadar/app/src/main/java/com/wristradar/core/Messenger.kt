@@ -357,6 +357,9 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     suspend fun sendUnpair(s: SecureSession) = s.send(A.UNPAIR)
 
+    /** Send time of the oldest text the friend hasn't acknowledged yet (null = none). */
+    suspend fun oldestUnackedTextAt(): Long? = g.messages.unacknowledged().filter { it.kind == MsgKind.TEXT }.minOfOrNull { it.localTime }
+
     /** Called periodically while connected: re-send texts that were not acknowledged. */
     suspend fun retryTick(s: SecureSession) {
         val now = System.currentTimeMillis()

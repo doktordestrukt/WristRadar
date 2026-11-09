@@ -162,6 +162,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     /** When the current search for the partner began (0 = connected / not searching). */
     private var searchingSince = 0L
     private var linkPriority = -1
+    @Volatile private var oldestUnackedAt: Long? = null
     private var tokenWindow = -1L
     private var partnerTokens: List<ByteArray> = emptyList()
     private var randomToken = Crypto.random(8)
@@ -171,6 +172,8 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     private var renewing = false
     /** Last time an app message moved over the session (used to renew keys only when idle). */
     @Volatile var lastActivity = 0L
+    /** Last time the current session delivered a valid message (the friend sends status at least every 45 s). */
+    @Volatile private var lastInbound = 0L
 
     private class Waiter(val types: Set<Byte>, val d: CompletableDeferred<ByteArray?>)
     private val waiters = HashMap<Int, Waiter>()
@@ -393,12 +396,18 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         val existing = currentSession()
         if (existing != null) {
             val iAmLower = Crypto.compare(g.identity.publicKey, partner.identityKey) < 0
-            if (link.isClient != iAmLower) { link.close(); return }       // keep existing preferred link
+            // Both watches connecting at the same moment: keep the deterministic preferred link.
+            // But if our session is older than a few seconds, the friend only reconnected because
+            // THEIR side of it died - our old session is a zombie, so the new link always wins.
+            val simultaneous = now() - existing.startedAt < SIMULTANEOUS_MS
+            if (simultaneous && link.isClient != iAmLower) { link.close(); return }
+            Log.i(TAG, "replacing session (age ${now() - existing.startedAt} ms) with a new link")
             session = null
             existing.close()
         }
         val s = SecureSession(link, SecureChannel(keys, link.isClient))
         session = s
+        lastInbound = now()
         authenticatedLinks += link.id
         renewing = false
         connecting = false
@@ -476,6 +485,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
                     return
                 }
                 val plain = s.open(f.copyOfRange(1, f.size))
+                if (plain != null && l === s.link) lastInbound = now()
                 if (plain == null) {
                     rejectedRecords++
                     Log.w(TAG, "rejected record #$rejectedRecords")
@@ -572,6 +582,17 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         val s = currentSession()
         // Periodic session renewal: a brand-new hybrid handshake (fresh X25519 + ML-KEM keys) heals
         // the session even if its keys had leaked. Only the client side starts it, and only when idle.
+        if (s != null) {
+            val silentFor = t - lastInbound
+            val waitingSince = oldestUnackedAt?.let { maxOf(it, s.startedAt) }
+            val stuck = silentFor > STUCK_MS && waitingSince != null && t - waitingSince > STUCK_MS
+            if (silentFor > DEAD_MS || stuck) {
+                Log.w(TAG, "session silent for $silentFor ms (stuck=$stuck) - reconnecting")
+                s.close()
+                return
+            }
+            scope.launch { oldestUnackedAt = messenger.oldestUnackedTextAt() }
+        }
         if (s != null && s.link.isClient && t - s.startedAt > RENEW_MS && t - lastActivity > 120_000 && !messenger.busy) {
             renewing = true
             Log.i(TAG, "renewing session keys")
@@ -580,7 +601,9 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         }
         // Battery: chat at full speed while the app is open or you're actively talking, otherwise
         // stretch the Bluetooth connection interval and send status less often.
-        val active = g.uiVisibility.appVisible || calls.state.value.live || messenger.busy || t - lastActivity < ACTIVE_MS
+        val up = updater.state.value
+        val active = g.uiVisibility.appVisible || calls.state.value.live || messenger.busy || t - lastActivity < ACTIVE_MS ||
+            up.sendingPct != null || up.receivingPct != null
         (s?.link as? ClientLink)?.let { cl ->
             val want = if (active) android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_BALANCED else android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER
             if (want != linkPriority && !messenger.busy) { linkPriority = want; cl.setPriority(want) }
@@ -771,6 +794,11 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         private const val TICK_MS = 5_000L
         private const val STATUS_MS = 15_000L
         private const val STATUS_IDLE_MS = 45_000L
+        /** No valid message from the friend for this long = dead link (they send status every <= 45 s). */
+        private const val DEAD_MS = 130_000L
+        /** A sent text unanswered AND nothing heard for this long = stuck link. */
+        private const val STUCK_MS = 30_000L
+        private const val SIMULTANEOUS_MS = 8_000L
         private const val ACTIVE_MS = 60_000L
         private const val SEARCH_HARD_MS = 120_000L
         private const val BOOST_MS = 60_000L
