@@ -403,6 +403,7 @@ fun missingFeatures(partnerVersion: Int): String {
     if (partnerVersion < 13) f += listOf("Connect 4", "Memory Match", "Dice Duel", "text formatting & spoilers")
     if (partnerVersion < 16) f += listOf("message effects")
     if (partnerVersion < 18) f += listOf("top-secret grade encryption")
+    if (partnerVersion < 19) f += listOf("a new key for every message")
     return f.joinToString(", ")
 }
 

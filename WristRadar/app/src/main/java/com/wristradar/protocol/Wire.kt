@@ -15,6 +15,8 @@ object F {
     const val PAIR_REVEAL: Byte = 0x12
     const val PAIR_CONFIRM: Byte = 0x13
     const val PAIR_ABORT: Byte = 0x14
+    /** Pairing V3 reply: like PAIR_RESPONSE with an ML-KEM-1024 key and the responder's ML-DSA-87 key. */
+    const val PAIR_RESPONSE3: Byte = 0x15
     const val HS_HELLO: Byte = 0x20
     const val HS_SERVER: Byte = 0x21
     const val HS_FINISH: Byte = 0x22

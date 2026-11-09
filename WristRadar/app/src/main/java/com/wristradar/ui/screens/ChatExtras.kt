@@ -157,6 +157,9 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "🔑 A new key for every message" to "Each message is locked with its own key, destroyed right after use. Even a stolen key can't open a single older message.",
+        "♻️ Faster healing" to "A completely fresh key exchange every hour when idle (was every 3 hours).",
+        "🤝 Top-level pairing" to "New pairings use ML-KEM-1024 and ML-DSA-87 too, when both watches have MK17.",
         "🛡 Top-secret grade encryption" to "When both watches have MK16: ML-KEM-1024 keys, ML-DSA-87 + Ed25519 identity signatures, and SHA-384 / HKDF-SHA-384 - the CNSA 2.0 style suite.",
         "💀 Intruder screen fixed" to "Someone refused by your watch now really gets the skull and music. Preview it in Settings › Blackbox security.",
         "🔐 App lock PIN" to "Lock WristRadar with a 4-6 digit PIN, asked every 30 minutes (you can change how often). Settings › Privacy.",

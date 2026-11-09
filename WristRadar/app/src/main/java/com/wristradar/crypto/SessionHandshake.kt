@@ -16,29 +16,31 @@ package com.wristradar.crypto
  *   V2  ML-KEM-768,  SHA-256, HKDF-SHA-256, Ed25519                       (every version)
  *   V3  ML-KEM-1024, SHA-256, HKDF-SHA-256, Ed25519                       (MK15+)
  *   V4  ML-KEM-1024, SHA-384, HKDF-SHA-384, Ed25519 AND ML-DSA-87         (MK16+, CNSA 2.0 style)
+ *   V5  as V4, plus a fresh key for EVERY message (symmetric hash ratchet)  (MK17+)
  *
  * A peer must hold BOTH the pairing PSK and the pinned identity key(s). Fresh ephemeral keys on
  * every connection give forward secrecy and post-compromise recovery per session.
  */
-enum class Suite(val label: String, val kem: MlKem.Level, val wide: Boolean, val title: String) {
+enum class Suite(val label: String, val kem: MlKem.Level, val wide: Boolean, val title: String, val perMessage: Boolean = false, internal val mark: Byte? = null) {
     V2("WR-HS-V2", MlKem.Level.ML_KEM_768, false, "X25519 + ML-KEM-768, Ed25519, SHA-256"),
     V3("WR-HS-V3", MlKem.Level.ML_KEM_1024, false, "X25519 + ML-KEM-1024, Ed25519, SHA-256"),
-    V4("WR-HS-V4", MlKem.Level.ML_KEM_1024, true, "X25519 + ML-KEM-1024, Ed25519 + ML-DSA-87, SHA-384");
+    V4("WR-HS-V4", MlKem.Level.ML_KEM_1024, true, "X25519 + ML-KEM-1024, Ed25519 + ML-DSA-87, SHA-384", mark = 0x04),
+    V5("WR-HS-V5", MlKem.Level.ML_KEM_1024, true, "X25519 + ML-KEM-1024, Ed25519 + ML-DSA-87, SHA-384, new key every message", perMessage = true, mark = 0x05);
 
     internal fun h(vararg parts: ByteArray) = if (wide) Crypto.sha384(*parts) else Crypto.sha256(*parts)
     internal fun kdf(ikm: ByteArray, salt: ByteArray, info: String) = if (wide) Crypto.hkdf384(ikm, salt, info) else Crypto.hkdf(ikm, salt, info)
-    internal val helloSize get() = (if (this == V4) 1 else 0) + 48 + kem.publicKeySize
+    internal val helloSize get() = (if (mark != null) 1 else 0) + 48 + kem.publicKeySize
     internal val bodySize get() = 32 + 64 + (if (wide) MlDsa.SIGNATURE_SIZE else 0)
 
     companion object {
         /** Works out the suite from a HELLO's size (and version byte for V4). */
         internal fun ofHello(p: ByteArray): Suite? = when {
-            p.size == V4.helloSize && p[0] == V4_MARK -> V4
+            p.size == V5.helloSize && p[0] == V5.mark -> V5
+            p.size == V4.helloSize && p[0] == V4.mark -> V4
             p.size == V3.helloSize -> V3
             p.size == V2.helloSize -> V2
             else -> null
         }
-        internal const val V4_MARK: Byte = 0x04
     }
 }
 
@@ -57,10 +59,12 @@ class HandshakeClient(
     private val partnerId: ByteArray,
     private val psk: ByteArray,
     level: MlKem.Level = MlKem.Level.ML_KEM_768,
-    /** With ML-KEM-1024 and post-quantum identities, the client uses suite V4. */
+    /** With ML-KEM-1024 and post-quantum identities, the client uses suite V4 (V5 with [perMessage]). */
     private val pq: PqIdentity? = null,
+    perMessage: Boolean = false,
 ) {
     val suite: Suite = when {
+        level == MlKem.Level.ML_KEM_1024 && pq != null && perMessage -> Suite.V5
         level == MlKem.Level.ML_KEM_1024 && pq != null -> Suite.V4
         level == MlKem.Level.ML_KEM_1024 -> Suite.V3
         else -> Suite.V2
@@ -77,7 +81,8 @@ class HandshakeClient(
 
     fun hello(): ByteArray {
         val body = ephPub + nonce + kem.publicKey
-        return if (suite == Suite.V4) byteArrayOf(Suite.V4_MARK) + body else body
+        val m = suite.mark
+        return if (m != null) byteArrayOf(m) + body else body
     }
 
     /** Returns (HS_FINISH payload, keys) or null if the server is not our partner. */
@@ -138,7 +143,7 @@ class HandshakeServer(
         val su = Suite.ofHello(p)
         if (su == null || (su.wide && pq == null)) null else {
             suite = su
-            val q = if (su == Suite.V4) p.copyOfRange(1, p.size) else p
+            val q = if (su.mark != null) p.copyOfRange(1, p.size) else p
             val ephC = q.copyOfRange(0, 32)
             val nC = q.copyOfRange(32, 48)
             val kemPkC = q.copyOfRange(48, q.size)

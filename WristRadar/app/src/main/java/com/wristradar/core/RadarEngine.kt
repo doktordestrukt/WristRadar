@@ -409,7 +409,8 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         // Top suite V4 (adds ML-DSA-87 + SHA-384) once we hold the friend's post-quantum identity.
         val pq = if (strong && updater.knownPartnerCode >= SUITE_V4_SINCE) pqIdentity() else null
         val hc = HandshakeClient(g.identity, partner.identityKey, partner.psk,
-            if (strong) com.wristradar.crypto.MlKem.Level.ML_KEM_1024 else com.wristradar.crypto.MlKem.Level.ML_KEM_768, pq)
+            if (strong) com.wristradar.crypto.MlKem.Level.ML_KEM_1024 else com.wristradar.crypto.MlKem.Level.ML_KEM_768, pq,
+            perMessage = updater.knownPartnerCode >= SUITE_V5_SINCE)
         val resp = request(link, frame(F.HS_HELLO, hc.hello()), setOf(F.HS_SERVER, F.HS_REJECT, F.BLACKBOX), 10_000)
         if (resp != null && resp[0] == F.BLACKBOX) {
             link.close()
@@ -532,7 +533,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
                 val thumb = g.profile.myAvatarThumb()
                 l.send(frame(F.PROFILE_RESP, Out().i(myDiscoveryId).str(g.profile.myName.value).bytes(thumb).build()))
             } else l.close()
-            F.PAIR_COMMIT, F.PAIR_RESPONSE, F.PAIR_REVEAL, F.PAIR_CONFIRM, F.PAIR_ABORT -> pairing.onFrame(l, f)
+            F.PAIR_COMMIT, F.PAIR_RESPONSE, F.PAIR_RESPONSE3, F.PAIR_REVEAL, F.PAIR_CONFIRM, F.PAIR_ABORT -> pairing.onFrame(l, f)
             F.HS_HELLO -> onHello(l, f)
             F.HS_FINISH -> onFinish(l, f)
             F.SECURE -> {
@@ -664,6 +665,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         val canUpgrade = when (sessionSuite) {
             com.wristradar.crypto.Suite.V2 -> updater.knownPartnerCode >= KEM1024_SINCE
             com.wristradar.crypto.Suite.V3 -> updater.knownPartnerCode >= SUITE_V4_SINCE && g.trust.partnerPq != null
+            com.wristradar.crypto.Suite.V4 -> updater.knownPartnerCode >= SUITE_V5_SINCE && g.trust.partnerPq != null
             else -> false
         }
         if (s != null && s.link.isClient && canUpgrade && !strongKemFailed &&
@@ -893,10 +895,13 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         const val KEM1024_SINCE = 17
         /** First versionCode with suite V4 (ML-DSA-87 + SHA-384) and PQ_ID. */
         const val SUITE_V4_SINCE = 18
+        /** First versionCode with suite V5 (a new key for every message). */
+        const val SUITE_V5_SINCE = 19
         private const val ACTIVE_MS = 60_000L
         private const val SEARCH_HARD_MS = 120_000L
         private const val BOOST_MS = 60_000L
-        private const val RENEW_MS = 3 * 60 * 60 * 1000L
+        /** Brand-new handshake (fresh X25519 + ML-KEM) every hour when idle: heals even a stolen session key. */
+        private const val RENEW_MS = 60 * 60 * 1000L
         val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,

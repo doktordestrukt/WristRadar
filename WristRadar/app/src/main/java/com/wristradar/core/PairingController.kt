@@ -3,6 +3,7 @@ package com.wristradar.core
 import android.bluetooth.BluetoothDevice
 import com.wristradar.AppGraph
 import com.wristradar.ble.Link
+import com.wristradar.crypto.MlDsa
 import com.wristradar.crypto.MlKem
 import com.wristradar.crypto.PairingCrypto
 import com.wristradar.security.ThreatType
@@ -31,6 +32,8 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
     private var targetDiscoveryId: Int? = null
     private var peerName: String = ""
     private var pendingCommit: ByteArray? = null
+    /** Pairing capability the initiator offered (3 = pairing V3). */
+    private var pendingCap = 0
     private var myConfirmed = false
     private var peerConfirmed = false
     private var timeoutJob: Job? = null
@@ -53,9 +56,10 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
             if (l == null) { fail("Could not reach $name. Move closer and try again."); return@launch }
             if (targetDiscoveryId != discoveryId || link != null) { l.close(); return@launch } // superseded
             link = l
-            val c = PairingCrypto(isInitiator = true, identity = g.identity)
+            val c = PairingCrypto(isInitiator = true, identity = g.identity, myPq = g.identity.pq)
             crypto = c
-            val ok = l.send(frame(F.PAIR_COMMIT, Out().i(engine.myDiscoveryId).raw(c.myCommit).str(myName).build()))
+            // The trailing capability byte offers pairing V3; older apps simply ignore it.
+            val ok = l.send(frame(F.PAIR_COMMIT, Out().i(engine.myDiscoveryId).raw(c.myCommit).str(myName).b(PAIR_V3_CAP.toByte()).build()))
             if (!ok) { fail("Connection lost."); return@launch }
             if (_state.value is PairingState.Connecting) {
                 _state.value = PairingState.WaitingForPeer(name, "Waiting for $name to accept…")
@@ -67,14 +71,16 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         val l = link ?: return
         val commit = pendingCommit ?: return
         if (_state.value !is PairingState.Incoming) return
-        val c = PairingCrypto(isInitiator = false, identity = g.identity)
+        val v3 = pendingCap >= PAIR_V3_CAP
+        val c = PairingCrypto(isInitiator = false, identity = g.identity, myPq = if (v3) g.identity.pq else null, responderV3 = v3)
         c.onPeerCommit(commit)
         crypto = c
         _state.value = PairingState.WaitingForPeer(peerName, "Exchanging keys…")
         engine.scope.launch {
-            if (!l.send(frame(F.PAIR_RESPONSE, Out().raw(c.ephPub).raw(c.myId).raw(c.nonce).raw(c.kemPublicKey).str(myName).build()))) {
-                fail("Connection lost.")
-            }
+            val ok = if (c.v3) l.send(frame(F.PAIR_RESPONSE3, Out().raw(c.ephPub).raw(c.myId).raw(c.nonce).raw(c.kemPublicKey)
+                .bytes(c.myPqPublic).str(myName).build()))
+            else l.send(frame(F.PAIR_RESPONSE, Out().raw(c.ephPub).raw(c.myId).raw(c.nonce).raw(c.kemPublicKey).str(myName).build()))
+            if (!ok) fail("Connection lost.")
         }
     }
 
@@ -108,7 +114,8 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         try {
             when (f[0]) {
                 F.PAIR_COMMIT -> onCommit(l, f)
-                F.PAIR_RESPONSE -> onResponse(l, f)
+                F.PAIR_RESPONSE -> onResponse(l, f, v3 = false)
+                F.PAIR_RESPONSE3 -> onResponse(l, f, v3 = true)
                 F.PAIR_REVEAL -> onReveal(l, f)
                 F.PAIR_CONFIRM -> onConfirm(l, f)
                 F.PAIR_ABORT -> if (l === link) {
@@ -137,6 +144,7 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         val theirDiscovery = r.i()
         val commit = r.raw(32)
         val name = r.str(80).take(20)
+        val cap = if (r.hasMore()) r.b().toInt() else 0
         fun reject(why: String) = engine.scope.launch { l.send(frame(F.PAIR_ABORT, Out().str(why).build())); delay(300); l.close() }
 
         if (g.trust.partner.value != null) { reject("already paired"); return }
@@ -149,30 +157,33 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
             // Both pressed PAIR on each other: lower discovery id keeps the initiator role.
             if (engine.myDiscoveryId < theirDiscovery) { reject("collision"); return }
             reset(closeLink = true)
-            link = l; peerName = name; pendingCommit = commit; targetDiscoveryId = theirDiscovery
+            link = l; peerName = name; pendingCommit = commit; targetDiscoveryId = theirDiscovery; pendingCap = cap
             _state.value = PairingState.Incoming(name)
             armTimeout()
             accept()                         // we already chose this watch - accept automatically
             return
         }
         reset()
-        link = l; peerName = name; pendingCommit = commit; targetDiscoveryId = theirDiscovery
+        link = l; peerName = name; pendingCommit = commit; targetDiscoveryId = theirDiscovery; pendingCap = cap
         _state.value = PairingState.Incoming(name)
         armTimeout()
     }
 
-    private fun onResponse(l: Link, f: ByteArray) {
+    private fun onResponse(l: Link, f: ByteArray, v3: Boolean) {
         if (l !== link) return
         val c = crypto ?: return
         if (!c.isInitiator) return
         val r = In(f, 1)
         val eph = r.raw(32); val id = r.raw(32); val n = r.raw(16)
-        val kemPk = r.raw(MlKem.PUBLIC_KEY_SIZE)
+        val kemPk = r.raw(if (v3) MlKem.Level.ML_KEM_1024.publicKeySize else MlKem.PUBLIC_KEY_SIZE)
+        val pq = if (v3) r.bytes(MlDsa.PUBLIC_KEY_SIZE + 16) else null
         val name = r.str(80).take(20)
         if (name.isNotBlank()) peerName = name
-        if (!c.onResponse(eph, id, n, kemPk)) { abort("Key exchange failed.", "key exchange failed"); return }
+        if (!c.onResponse(eph, id, n, kemPk, pq)) { abort("Key exchange failed.", "key exchange failed"); return }
         engine.scope.launch {
-            if (!l.send(frame(F.PAIR_REVEAL, Out().raw(c.ephPub).raw(c.myId).raw(c.nonce).raw(c.kemCiphertext!!).build()))) {
+            val reveal = Out().raw(c.ephPub).raw(c.myId).raw(c.nonce).raw(c.kemCiphertext!!)
+            if (c.v3) reveal.bytes(c.myPqPublic)
+            if (!l.send(frame(F.PAIR_REVEAL, reveal.build()))) {
                 fail("Connection lost."); return@launch
             }
             _state.value = PairingState.Verify(peerName, c.sasCode(), false, false)
@@ -184,7 +195,9 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         val c = crypto ?: return
         if (c.isInitiator) return
         val r = In(f, 1)
-        if (!c.onReveal(r.raw(32), r.raw(32), r.raw(16), r.raw(MlKem.CIPHERTEXT_SIZE))) {
+        val eph = r.raw(32); val id = r.raw(32); val n = r.raw(16); val ct = r.raw(c.kemCiphertextSize)
+        val pq = if (c.v3) r.bytes(MlDsa.PUBLIC_KEY_SIZE + 16) else null
+        if (!c.onReveal(eph, id, n, ct, pq)) {
             g.blackbox.report(ThreatType.PAIRING_TAMPER, "Pairing reveal did not match its commitment", l)
             engine.sendBlackbox(l)
             abort("Verification failed - possible interference. Pairing stopped.", "commitment mismatch"); return
@@ -212,6 +225,8 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         val l = link ?: return
         val peerId = c.peerId ?: return
         g.trust.save(peerId, c.derivePsk())
+        // Pairing V3 already proved the friend's ML-DSA-87 key - store it straight away.
+        c.peerPq?.takeIf { c.v3 }?.let { g.trust.savePartnerPq(it) }
         g.profile.setPartner(peerName, null)
         c.wipe()
         timeoutJob?.cancel()
@@ -255,10 +270,15 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         if (closeLink) link?.close()
         link = null
         pendingCommit = null
+        pendingCap = 0
         targetDiscoveryId = null
         myConfirmed = false
         peerConfirmed = false
     }
 
-    companion object { const val PAIRING_TIMEOUT_MS = 120_000L }
+    companion object {
+        const val PAIRING_TIMEOUT_MS = 120_000L
+        /** Capability byte appended to PAIR_COMMIT: "I can pair with V3". */
+        const val PAIR_V3_CAP = 3
+    }
 }
