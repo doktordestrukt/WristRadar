@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 16
-val wrVersionName = "14.0.0"
-val wrReleaseLabel = "MK14 Aurora"
+val wrVersionCode = 17
+val wrVersionName = "15.0.0"
+val wrReleaseLabel = "MK15 Vault"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.

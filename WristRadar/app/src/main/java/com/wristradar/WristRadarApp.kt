@@ -38,6 +38,7 @@ class AppGraph(app: Application) {
     val profile = ProfileStore(app, vault)
     private val db = AppDatabase.build(app)
     val messages = MessageRepository(app, db.messages(), vault)
+    val lock = com.wristradar.data.AppLock(app, vault)
     val notifier = Notifier(app, settings)
     val battery = BatteryReader(app)
     val uiVisibility = UiVisibility()

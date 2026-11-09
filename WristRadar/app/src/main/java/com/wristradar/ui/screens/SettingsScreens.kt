@@ -250,6 +250,10 @@ fun PrivacyScreen(nav: NavHostController) {
     var confirmClear by remember { mutableStateOf(false) }
     WrScreen {
         item { SectionLabel("Privacy & security") }
+        item {
+            WrChip("App lock PIN", { nav.navigate("pinsettings") },
+                secondary = if (g.lock.isSet) "On" else "Off - tap to set one", primary = !g.lock.isSet, icon = { Icon(Icons.Filled.Lock, null) })
+        }
         item { WrToggle("Message previews", s.previews, "In notifications") { v -> g.settings.update { it.copy(previews = v) } } }
         partner?.let { pt ->
             item {
@@ -260,7 +264,9 @@ fun PrivacyScreen(nav: NavHostController) {
         item { KeyValue("Your fingerprint", g.identity.fingerprint()) }
         partner?.let { pt -> item { KeyValue("Partner fingerprint", IdentityManager.fingerprintOf(pt.identityKey)) } }
         item {
-            KeyValue("Encryption", "X25519 + ML-KEM-768 (post-quantum) key agreement, Ed25519 identities, AES-256-GCM per message, keys rotate every session")
+            val kem = g.engine.sessionKem
+            KeyValue("Encryption", "X25519 + ${kem?.label ?: "ML-KEM-1024"} (post-quantum) key agreement, Ed25519 identities, AES-256-GCM per message, fresh keys every session" +
+                (if (kem == null) "" else "\nThis connection: ${kem.label}"))
         }
         item {
             KeyValue("Stored on watch", "Keys and messages encrypted with an Android Keystore key. Nothing leaves the watch except to your partner.")

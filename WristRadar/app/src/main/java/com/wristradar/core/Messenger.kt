@@ -170,7 +170,8 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
             sendSeen(g.messages.markAllRead())
             g.notifier.tick()
         } else {
-            if (g.uiVisibility.appVisible) com.wristradar.ui.components.BannerBus.show(g.profile.partnerName.value ?: "Partner", if (g.settings.current.previews) preview else "New message")
+            val showText = g.settings.current.previews && !g.lock.locked.value
+            if (g.uiVisibility.appVisible) com.wristradar.ui.components.BannerBus.show(g.profile.partnerName.value ?: "Partner", if (showText) preview else "New message")
             g.notifier.showMessage(g.profile.partnerName.value ?: "Partner", preview, g.messages.unreadCount())
         }
     }

@@ -200,6 +200,8 @@ data class Settings(
     val haptics: Boolean = true,
     /** When the friend is away: home shows only chat (extras and "connect to nearby" come back when they're near). */
     val awayMode: Boolean = true,
+    /** "We've launched pins!" was shown. */
+    val pinIntroSeen: Boolean = false,
     /** Fingerprint of the partner whose emoji safety code was checked in person ("" = not verified). */
     val safetyVerified: String = "",
 ) {
@@ -262,6 +264,7 @@ class SettingsStore(context: Context) {
             dynamicIsland = prefs.getBoolean("island", d.dynamicIsland),
             haptics = prefs.getBoolean("haptics", d.haptics),
             awayMode = prefs.getBoolean("away_mode", d.awayMode),
+            pinIntroSeen = prefs.getBoolean("pin_intro", d.pinIntroSeen),
             safetyVerified = prefs.getString("safety_verified", d.safetyVerified) ?: "",
             chatText = runCatching { TextSize.valueOf(prefs.getString("chat_text", d.chatText.name)!!) }.getOrDefault(d.chatText),
             mutedUntil = prefs.getLong("muted_until", d.mutedUntil),
@@ -309,7 +312,7 @@ class SettingsStore(context: Context) {
             .putString("quick_replies", s.quickReplies.joinToString("\u001F"))
             .putBoolean("glass", s.liquidGlass).putString("icon_pack", s.iconPack.name).putString("app_icon", s.appIcon.name)
             .putBoolean("glass_motion", s.glassMotion).putBoolean("glass_ripple", s.glassRipple).putBoolean("night_tint", s.nightTint)
-            .putBoolean("island", s.dynamicIsland).putBoolean("haptics", s.haptics).putBoolean("away_mode", s.awayMode)
+            .putBoolean("island", s.dynamicIsland).putBoolean("haptics", s.haptics).putBoolean("away_mode", s.awayMode).putBoolean("pin_intro", s.pinIntroSeen)
             .putString("safety_verified", s.safetyVerified)
             .apply()
         _state.value = s

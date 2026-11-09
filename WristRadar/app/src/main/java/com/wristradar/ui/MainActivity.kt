@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         val g = WristRadarApp.graph
         g.uiVisibility.appVisible = true
+        g.lock.checkTimeout(foreground = true)
         g.engine.start()
     }
 
@@ -148,9 +149,18 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
             callState is com.wristradar.audio.CallState.Active
         if (live && nav.currentDestination?.route != "call") nav.navigate("call") { launchSingleTop = true }
     }
-    // Announce each new version once, right after it is installed.
+    // Announce each new version once, right after it is installed (then the PIN intro, once).
     LaunchedEffect(Unit) {
-        if (g.settings.current.seenVersion < com.wristradar.BuildConfig.VERSION_CODE) nav.navigate("whatsnew") { launchSingleTop = true }
+        val s = g.settings.current
+        if (s.seenVersion < com.wristradar.BuildConfig.VERSION_CODE) nav.navigate("whatsnew") { launchSingleTop = true }
+        else if (!s.pinIntroSeen && !g.lock.isSet) nav.navigate("pinintro") { launchSingleTop = true }
+    }
+    // App lock: ask again after the chosen time, but never in the middle of a call.
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(20_000)
+            if (!g.engine.calls.state.value.live) g.lock.checkTimeout(foreground = false)
+        }
     }
     LaunchedEffect(pairing) {
         if (pairing is PairingState.Incoming) {
@@ -209,6 +219,9 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
             com.wristradar.ui.screens.WalkScreen()
         }
         composable("whatsnew") { com.wristradar.ui.screens.WhatsNewScreen(nav) }
+        composable("pinintro") { com.wristradar.ui.screens.PinIntroScreen(nav) }
+        composable("pinsetup") { com.wristradar.ui.screens.PinSetupScreen(nav) }
+        composable("pinsettings") { com.wristradar.ui.screens.PinSettingsScreen(nav) }
         composable("disclaimer") { com.wristradar.ui.screens.DisclaimerScreen() }
         composable("blackbox") { BlackboxSettingsScreen(nav) }
         composable("securitylog") { SecurityLogScreen() }
@@ -230,6 +243,7 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     com.wristradar.ui.screens.BlastOverlay()
     com.wristradar.ui.screens.MessageEffectOverlay()
     BlackboxOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
+    com.wristradar.ui.screens.LockOverlay()
     }
 }
 

@@ -172,6 +172,17 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     private var renewing = false
     /** Last time an app message moved over the session (used to renew keys only when idle). */
     @Volatile var lastActivity = 0L
+    /** KEM strength of the current session (null = not connected). */
+    @Volatile var sessionKem: com.wristradar.crypto.MlKem.Level? = null
+        private set
+    @Volatile private var strongKemFailed = false
+    /** Friend version for which ML-KEM-1024 failed: don't retry until they install a different one (no reconnect loops). */
+    @Volatile private var strongFailedAtCode = -1
+
+    /** Friend's app version just arrived: a new version gets another chance at ML-KEM-1024. */
+    fun onPartnerVersion(code: Int) {
+        if (code >= KEM1024_SINCE && code != strongFailedAtCode) strongKemFailed = false
+    }
     /** Last time the current session delivered a valid message (the friend sends status at least every 45 s). */
     @Volatile private var lastInbound = 0L
 
@@ -357,7 +368,11 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         connecting = true
         val partner = g.trust.partner.value ?: run { link.close(); connecting = false; return }
         setPhase(Phase.AUTHENTICATING, "Verifying partner identity…")
-        val hc = HandshakeClient(g.identity, partner.identityKey, partner.psk)
+        // ML-KEM-1024 once we know the friend's app understands it; otherwise (or if that just
+        // failed) the ML-KEM-768 handshake every version speaks.
+        val strong = updater.knownPartnerCode >= KEM1024_SINCE && !strongKemFailed
+        val hc = HandshakeClient(g.identity, partner.identityKey, partner.psk,
+            if (strong) com.wristradar.crypto.MlKem.Level.ML_KEM_1024 else com.wristradar.crypto.MlKem.Level.ML_KEM_768)
         val resp = request(link, frame(F.HS_HELLO, hc.hello()), setOf(F.HS_SERVER, F.HS_REJECT, F.BLACKBOX), 10_000)
         if (resp != null && resp[0] == F.BLACKBOX) {
             link.close()
@@ -366,6 +381,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             return
         }
         if (resp == null || resp[0] == F.HS_REJECT) {
+            if (strong) { strongKemFailed = true; strongFailedAtCode = updater.knownPartnerCode }   // retry with ML-KEM-768
             link.close()
             onConnectFailed(if (resp == null) "No response from partner" else "Partner refused the session (pairing removed?)")
             return
@@ -408,6 +424,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         }
         val s = SecureSession(link, SecureChannel(keys, link.isClient))
         session = s
+        sessionKem = keys.kem
         lastInbound = now()
         authenticatedLinks += link.id
         renewing = false
@@ -544,6 +561,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             val startedAt = session?.startedAt ?: now()
             session?.close()
             session = null
+            sessionKem = null
             g.trust.markPartnerSeen()
             calls.onLinkLost()
             updater.onSessionDown()
@@ -593,6 +611,16 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
                 return
             }
             scope.launch { oldestUnackedAt = messenger.oldestUnackedTextAt() }
+        }
+        // Upgrade a 768 session to ML-KEM-1024 as soon as both sides support it (client starts it, when idle).
+        if (s != null && s.link.isClient && sessionKem == com.wristradar.crypto.MlKem.Level.ML_KEM_768 &&
+            updater.knownPartnerCode >= KEM1024_SINCE && !strongKemFailed &&
+            t - lastActivity > 15_000 && !messenger.busy && !calls.state.value.live
+        ) {
+            renewing = true
+            Log.i(TAG, "upgrading session to ML-KEM-1024")
+            s.close()
+            return
         }
         if (s != null && s.link.isClient && t - s.startedAt > RENEW_MS && t - lastActivity > 120_000 && !messenger.busy) {
             renewing = true
@@ -809,6 +837,8 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         /** A sent text unanswered AND nothing heard for this long = stuck link. */
         private const val STUCK_MS = 30_000L
         private const val SIMULTANEOUS_MS = 8_000L
+        /** First versionCode that speaks the ML-KEM-1024 handshake. */
+        const val KEM1024_SINCE = 17
         private const val ACTIVE_MS = 60_000L
         private const val SEARCH_HARD_MS = 120_000L
         private const val BOOST_MS = 60_000L

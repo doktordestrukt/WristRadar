@@ -79,7 +79,9 @@ class Notifier(private val ctx: Context, private val settings: SettingsStore) {
             ).addRemoteInput(RemoteInput.Builder(ReplyReceiver.KEY).setLabel("Reply to $sender").build())
                 .setAllowGeneratedReplies(true)
                 .build()
-            val body = if (s.previews) preview else "New message"
+            // With an app lock PIN, never show what a message says outside the app.
+            val showText = s.previews && !com.wristradar.WristRadarApp.graph.lock.isSet
+            val body = if (showText) preview else "New message"
             val b = NotificationCompat.Builder(ctx, if (s.sound) CH_MSG else CH_MSG_QUIET)
                 .setSmallIcon(R.drawable.ic_stat_radar)
                 .setContentTitle(sender)
