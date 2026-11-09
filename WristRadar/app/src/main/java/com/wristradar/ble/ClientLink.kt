@@ -24,7 +24,8 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
     private val ready = CompletableDeferred<Boolean>()
     @Volatile private var rssiWait: CompletableDeferred<Int?>? = null
 
-    override val maxFragment: Int get() = mtu - 3
+    // On the long-range PHY each packet takes 4-8x longer on air: smaller fragments lose less.
+    override val maxFragment: Int get() = if (onLongRange) minOf(mtu - 3, 244) else mtu - 3
     override val deviceName: String? get() = runCatching { device.name }.getOrNull()
 
     suspend fun connect(timeoutMs: Long = 15_000): Boolean {
@@ -53,21 +54,33 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
         withTimeoutOrNull(2_000) { d.await() }
     }
 
-    private var onCoded = false
+    /** 0 = fast 1M/2M PHY, 2 = Coded S2 (~2x range), 8 = Coded S8 (~4x range, slowest). */
+    private var codedLevel = 0
+
+    /** True while on a long-range PHY (fragments are kept smaller there: fewer lost packets). */
+    val onLongRange: Boolean get() = codedLevel != 0
 
     /**
-     * Weak signal (far away) -> Coded PHY S2 (about double the range, half the speed);
-     * strong signal -> 1M/2M PHY for fast pictures and clear calls. Hysteresis avoids flapping.
+     * Steps the radio mode with the signal: strong -> 1M/2M (fast pictures, clear calls); weak ->
+     * Coded S2; very weak -> Coded S8, the most robust mode Bluetooth LE has. Hysteresis avoids
+     * flapping between modes.
      */
     fun adaptPhy(rssi: Int) {
         if (!longRange) return
         val g = gatt ?: return
-        if (!onCoded && rssi < -82) {
-            onCoded = true
-            runCatching { g.setPreferredPhy(BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_OPTION_S2) }
-        } else if (onCoded && rssi > -70) {
-            onCoded = false
-            runCatching { g.setPreferredPhy(BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_OPTION_NO_PREFERRED) }
+        val want = when {
+            rssi < -90 || (codedLevel == 8 && rssi < -84) -> 8
+            rssi < -79 || (codedLevel != 0 && rssi < -69) -> 2
+            else -> 0
+        }
+        if (want == codedLevel) return
+        codedLevel = want
+        runCatching {
+            when (want) {
+                0 -> g.setPreferredPhy(BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_OPTION_NO_PREFERRED)
+                2 -> g.setPreferredPhy(BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_OPTION_S2)
+                else -> g.setPreferredPhy(BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_OPTION_S8)
+            }
         }
     }
 

@@ -77,6 +77,8 @@ object A {
     const val MOOD: Byte = 0x62
     /** A vanishing secret was opened: uuid (sender deletes its copy too). */
     const val OPENED: Byte = 0x63
+    /** Message effect (MK14+): effect id byte. Plays full screen on the partner's watch. */
+    const val EFFECT: Byte = 0x64
 }
 
 class Out {

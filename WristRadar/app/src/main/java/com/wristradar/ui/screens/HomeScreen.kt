@@ -108,6 +108,9 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                 runCatching { ctx.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }, primary = true)
         }
+        // Away mode: while the friend is out of reach, only the chat stays (nothing that makes you
+        // visible to other watches, like "Connect to nearby"). Everything returns when they're near.
+        val away = partner != null && settings.awayMode && conn.phase != Phase.CONNECTED
         if (partner != null) {
             item {
                 WrChip(
@@ -124,13 +127,16 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                     tile = false,
                 )
             }
-            item {
+            if (away) item {
+                Hint("🌙 ${partnerName ?: "Your friend"} is away - extras come back when they're near.")
+            }
+            if (!away) item {
                 val mood by g.engine.extras.partnerMood.collectAsState()
                 WrChip("✨ Fun & extras", { nav.navigate("fun") },
                     secondary = mood?.let { "${partnerName ?: "Friend"}: $it" } ?: "Games, draw and more",
                     icon = { Text("🎮", fontSize = 16.sp) })
             }
-            item {
+            if (!away) item {
                 WrChip("Walk to ${partnerName ?: "partner"}", { nav.navigate("walk") },
                     secondary = "Steps, distance & time",
                     icon = { Text("🚶", fontSize = 16.sp) })
@@ -143,7 +149,7 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                 )
             }
         }
-        item {
+        if (!away) item {
             WrChip(
                 "Connect to nearby watches", { nav.navigate("discovery") },
                 primary = partner == null,

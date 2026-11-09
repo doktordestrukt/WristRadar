@@ -195,6 +195,7 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("quickreplies") { com.wristradar.ui.screens.QuickRepliesScreen() }
         composable("fun") { com.wristradar.ui.screens.FunMenuScreen(nav) }
         composable("draw") { com.wristradar.ui.screens.DrawScreen(nav) }
+        composable("sendeffect") { com.wristradar.ui.screens.EffectPickerSendScreen(nav) }
         composable("blast") { com.wristradar.ui.screens.BlastScreen(nav) }
         composable("games") { com.wristradar.ui.screens.GamesScreen(nav) }
         composable("game") { com.wristradar.ui.screens.GameScreen(nav) }
@@ -227,6 +228,7 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     com.wristradar.ui.blackbox.SecurityWarningOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
     com.wristradar.ui.screens.GameInviteOverlay(onOpen = { nav.navigate("game") { launchSingleTop = true } })
     com.wristradar.ui.screens.BlastOverlay()
+    com.wristradar.ui.screens.MessageEffectOverlay()
     BlackboxOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
     }
 }

@@ -43,7 +43,9 @@ class BleAdvertiser(context: Context) {
 
     fun update(payload: AdvertPayload, mode: Int, range: RangeMode, name: String?, onResult: (Boolean, String?) -> Unit) {
         updateLegacy(payload, mode, range, onResult)
-        if (range == RangeMode.MAX && longRangeSupported) updateCoded(payload, name, onResult) else stopCoded()
+        // Long-range advert: fast (every 100 ms) while actively searching, normal (250 ms) otherwise.
+        val fast = mode == AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+        if (range == RangeMode.MAX && longRangeSupported) updateCoded(payload, name, fast, onResult) else stopCoded()
     }
 
     private fun updateLegacy(payload: AdvertPayload, mode: Int, range: RangeMode, onResult: (Boolean, String?) -> Unit) {
@@ -85,9 +87,9 @@ class BleAdvertiser(context: Context) {
             .onFailure { callback = null; currentKey = null; onResult(false, it.message) }
     }
 
-    private fun updateCoded(payload: AdvertPayload, name: String?, onResult: (Boolean, String?) -> Unit) {
+    private fun updateCoded(payload: AdvertPayload, name: String?, fast: Boolean, onResult: (Boolean, String?) -> Unit) {
         val body = payload.encodeWithName(name)
-        val key = body.contentToString()
+        val key = body.contentToString() + fast
         if (key == codedKey && codedCallback != null) return
         stopCoded()
         val adv = adapter?.bluetoothLeAdvertiser ?: return
@@ -97,7 +99,7 @@ class BleAdvertiser(context: Context) {
             .setScannable(false)
             .setPrimaryPhy(BluetoothDevice.PHY_LE_CODED)
             .setSecondaryPhy(BluetoothDevice.PHY_LE_CODED)
-            .setInterval(AdvertisingSetParameters.INTERVAL_MEDIUM)
+            .setInterval(if (fast) AdvertisingSetParameters.INTERVAL_LOW else AdvertisingSetParameters.INTERVAL_MEDIUM)
             .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_MAX)
             .build()
         val data = AdvertiseData.Builder()

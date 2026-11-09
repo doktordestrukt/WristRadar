@@ -33,6 +33,8 @@ enum class IconPack(val label: String, val tile: List<Long>?) {
 
 /** Home-screen app icon (launcher alias). */
 enum class AppIcon(val label: String, val alias: String) {
+    /** Follows the current theme (one icon per theme). */
+    MATCH("Matches your theme", ""),
     CLASSIC("Classic", ".ui.LauncherClassic"),
     ROSE("Rose glass", ".ui.LauncherRose"),
     MIDNIGHT("Midnight glass", ".ui.LauncherMidnight"),
@@ -97,6 +99,17 @@ object ThemePresets {
         glass("glass_cherry", "Cherry Glass", 0xFFFFFFFF, 0xFFFFC2CB, 0xFFFF6B81, 0x8C9E1430, 0xFF7CFFC4, 0xFF1A0006, 0xFF6E0A1E, 0xFFC7213F),
         glass("glass_ocean", "Ocean Glass", 0xFFFFFFFF, 0xFFBFF4FF, 0xFF4FD1FF, 0x8C0E6A9E, 0xFF7CFFC4, 0xFF001A2E, 0xFF045A8D, 0xFF1AA6C9),
         glass("glass_gold", "Champagne Glass", 0xFF3A2A10, 0xFF8A6214, 0xFFC99A3E, 0x8CB78A3A, 0xFF16865A, 0xFFFFF4DF, 0xFFEFD3A0, 0xFFC9A061),
+        // ---- gradient glass
+        glass("gg_aurora", "Aurora Glass", 0xFFFFFFFF, 0xFFB8FFE4, 0xFF6EE7B7, 0x8C1B6E8A, 0xFFB8FFE4, 0xFF0B1E3F, 0xFF1B6E8A, 0xFF6EE7B7),
+        glass("gg_candy", "Candy Glass", 0xFF3A2550, 0xFF9B4FD0, 0xFFF06B8E, 0x8CA16BD1, 0xFF0E8C5A, 0xFFFF9A9E, 0xFFFAD0C4, 0xFFA18CD1),
+        glass("gg_nebula", "Nebula Glass", 0xFFFFFFFF, 0xFFF3C2FF, 0xFFFF4FB8, 0x8C8E1BC9, 0xFF7CFFC4, 0xFF2B0F54, 0xFFAB20FD, 0xFFFF4FB8),
+        glass("gg_tropical", "Tropical Glass", 0xFFFFFFFF, 0xFFD6FFF6, 0xFFC86DD7, 0x8C3F7BD0, 0xFFFFF59D, 0xFF00C9A7, 0xFF4D8FE8, 0xFFC86DD7),
+        glass("gg_berry", "Berry Glass", 0xFFFFFFFF, 0xFFFFC7E6, 0xFFFF6CAB, 0x8C5A1FC9, 0xFF7CFFC4, 0xFF4A00E0, 0xFF8E2DE2, 0xFFFF6CAB),
+        glass("gg_sunrise", "Sunrise Glass", 0xFF4A1A06, 0xFFC0390F, 0xFFFF8A3D, 0x8CD0581F, 0xFF0E8C5A, 0xFFFF512F, 0xFFF09819, 0xFFFFD86F),
+        glass("gg_lagoon", "Lagoon Glass", 0xFFFFFFFF, 0xFFCFFFF0, 0xFF43CEA2, 0x8C1B7FA0, 0xFFFFF59D, 0xFF185A9D, 0xFF2C93A0, 0xFF43CEA2),
+        glass("gg_galaxy", "Galaxy Pink Glass", 0xFFFFFFFF, 0xFFFFD1F7, 0xFFFF77E9, 0x8C8A2BB0, 0xFF7CFFC4, 0xFF1A0B2E, 0xFF7A1FA2, 0xFFFF77E9),
+        glass("gg_breeze", "Ocean Breeze Glass", 0xFFFFFFFF, 0xFFCCFFFF, 0xFF1BFFFF, 0x8C2E3192, 0xFFFFF59D, 0xFF2E3192, 0xFF2C7FCB, 0xFF1BFFFF),
+        glass("gg_mango", "Mango Glass", 0xFF4A2A00, 0xFFB06000, 0xFFFFB347, 0x8CD08A20, 0xFF0E8C5A, 0xFFFFE259, 0xFFFFC371, 0xFFFF8E53),
         // ---- soft glass
         glass("soft_blush", "Blush Glass", 0xFF4A1F2E, 0xFFB8476B, 0xFFE07A9A, 0x8CC7577A, 0xFF0E8C5A, 0xFFFFE9EF, 0xFFF7C6D3, 0xFFE89AB2),
         glass("soft_cotton", "Cotton Candy Glass", 0xFF3A2550, 0xFF9B59D0, 0xFFF08BC0, 0x8CA77BD6, 0xFF0E8C5A, 0xFFFFD6E8, 0xFFE3D4FF, 0xFFB8E1FF),
@@ -155,7 +168,7 @@ data class Settings(
     /** Liquid-glass panels, buttons and bubbles on every theme. */
     val liquidGlass: Boolean = true,
     val iconPack: IconPack = IconPack.MATCH,
-    val appIcon: AppIcon = AppIcon.CLASSIC,
+    val appIcon: AppIcon = AppIcon.MATCH,
     val chatText: TextSize = TextSize.NORMAL,
     /** Notifications muted until this time (ms), 0 = not muted, Long.MAX_VALUE = until unmuted. */
     val mutedUntil: Long = 0,
@@ -185,6 +198,8 @@ data class Settings(
     val dynamicIsland: Boolean = true,
     /** Tiny tap feedback on buttons. */
     val haptics: Boolean = true,
+    /** When the friend is away: home shows only chat (extras and "connect to nearby" come back when they're near). */
+    val awayMode: Boolean = true,
     /** Fingerprint of the partner whose emoji safety code was checked in person ("" = not verified). */
     val safetyVerified: String = "",
 ) {
@@ -246,6 +261,7 @@ class SettingsStore(context: Context) {
             nightTint = prefs.getBoolean("night_tint", d.nightTint),
             dynamicIsland = prefs.getBoolean("island", d.dynamicIsland),
             haptics = prefs.getBoolean("haptics", d.haptics),
+            awayMode = prefs.getBoolean("away_mode", d.awayMode),
             safetyVerified = prefs.getString("safety_verified", d.safetyVerified) ?: "",
             chatText = runCatching { TextSize.valueOf(prefs.getString("chat_text", d.chatText.name)!!) }.getOrDefault(d.chatText),
             mutedUntil = prefs.getLong("muted_until", d.mutedUntil),
@@ -254,6 +270,11 @@ class SettingsStore(context: Context) {
             appIcon = runCatching { AppIcon.valueOf(prefs.getString("app_icon", d.appIcon.name)!!) }.getOrDefault(d.appIcon),
         ).let { s ->
             // V7: liquid glass is the default look. Anyone still on the old default theme moves to Rose Glass once.
+            // MK14: the app icon follows the theme. Anyone still on the old default (Classic) switches once.
+            val s = if (!prefs.getBoolean("icon_match_migrated", false)) {
+                prefs.edit().putBoolean("icon_match_migrated", true).apply()
+                if (s.appIcon == AppIcon.CLASSIC) s.copy(appIcon = AppIcon.MATCH) else s
+            } else s
             if (!prefs.getBoolean("glass_migrated", false)) {
                 prefs.edit().putBoolean("glass_migrated", true).apply()
                 if (s.themeId == "midnight") s.copy(themeId = ThemePresets.default.id) else s
@@ -288,7 +309,7 @@ class SettingsStore(context: Context) {
             .putString("quick_replies", s.quickReplies.joinToString("\u001F"))
             .putBoolean("glass", s.liquidGlass).putString("icon_pack", s.iconPack.name).putString("app_icon", s.appIcon.name)
             .putBoolean("glass_motion", s.glassMotion).putBoolean("glass_ripple", s.glassRipple).putBoolean("night_tint", s.nightTint)
-            .putBoolean("island", s.dynamicIsland).putBoolean("haptics", s.haptics)
+            .putBoolean("island", s.dynamicIsland).putBoolean("haptics", s.haptics).putBoolean("away_mode", s.awayMode)
             .putString("safety_verified", s.safetyVerified)
             .apply()
         _state.value = s

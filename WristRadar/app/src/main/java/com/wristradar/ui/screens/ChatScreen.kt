@@ -112,7 +112,12 @@ fun ChatScreen(nav: NavHostController) {
     val sendText = rememberTextInput(onClosed = { g.engine.messenger.sendTyping(false) }) { text ->
         val to = ChatReply.target?.id
         ChatReply.target = null
-        scope.launch { g.engine.messenger.sendText(text, to) }
+        val fx = ChatEffect.pending
+        ChatEffect.pending = null
+        scope.launch {
+            g.engine.messenger.sendText(text, to)
+            fx?.let { g.engine.extras.sendEffect(it) }
+        }
     }
 
     DisposableEffect(Unit) {
@@ -258,6 +263,16 @@ fun ChatScreen(nav: NavHostController) {
                         Text("✕", fontSize = 11.sp, color = p.text)
                     }
                 }
+                ChatEffect.pending?.let { fx ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(8.dp)).background(p.primary.copy(alpha = 0.25f))
+                            .clickable { ChatEffect.pending = null }.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Next message: ${fx.emoji} ${fx.title}", fontSize = 10.sp, color = p.text, maxLines = 1, modifier = Modifier.weight(1f))
+                        Text("✕", fontSize = 11.sp, color = p.text)
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(
                         onClick = { g.engine.messenger.sendTyping(true); sendText("Message ${partnerName ?: ""}".trim()) },
@@ -296,6 +311,10 @@ fun ChatScreen(nav: NavHostController) {
                     CompactChip(onClick = { nav.navigate("search") }, label = { Text("🔍 Search", fontSize = 11.sp) },
                         colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
                 }
+                Spacer(Modifier.height(4.dp))
+                CompactChip(onClick = { nav.navigate("sendeffect") }, enabled = partner != null,
+                    label = { Text("🎉 Send with effect", fontSize = 11.sp) },
+                    colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     CompactChip(onClick = { g.engine.messenger.nudge() }, enabled = phase == Phase.CONNECTED,
@@ -382,6 +401,7 @@ fun missingFeatures(partnerVersion: Int): String {
     if (partnerVersion < 4) f += listOf("games", "emoji blasts", "tap code", "status")
     if (partnerVersion < 8) f += listOf("profile banners", "profile effects")
     if (partnerVersion < 13) f += listOf("Connect 4", "Memory Match", "Dice Duel", "text formatting & spoilers")
+    if (partnerVersion < 16) f += listOf("message effects")
     return f.joinToString(", ")
 }
 

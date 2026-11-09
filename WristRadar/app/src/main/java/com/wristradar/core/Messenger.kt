@@ -94,7 +94,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
             A.VERSION, A.UPD_OFFER, A.UPD_REQ, A.UPD_CHUNK, A.UPD_ACK -> engine.updater.handle(session, type, p)
             A.SECRET -> onText(session, p, secret = true)
             A.OPENED -> Unit   // secret messages removed in V5
-            A.BLAST, A.GAME, A.TAPS, A.TODO, A.MOOD -> engine.extras.handle(type, p)
+            A.BLAST, A.GAME, A.TAPS, A.TODO, A.MOOD, A.EFFECT -> engine.extras.handle(type, p)
             A.SOS -> Unit   // SOS removed in V6
             A.NUDGE -> {
                 g.notifier.nudge()

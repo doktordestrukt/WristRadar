@@ -80,7 +80,8 @@ abstract class Link(val isClient: Boolean, val address: String) {
 
     companion object {
         private val counter = AtomicInteger()
-        const val FRAGMENT_TIMEOUT_MS = 5_000L
+        /** Long enough for link-layer retries at the edge of range before giving up on the link. */
+        const val FRAGMENT_TIMEOUT_MS = 8_000L
         const val MAX_FRAME = 64 * 1024
         const val MAX_ATTR = 512
     }

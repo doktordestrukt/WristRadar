@@ -91,6 +91,19 @@ object GameRules {
     }
 }
 
+/** Full-screen effects that can be sent with a message. */
+enum class MessageEffect(val id: Int, val emoji: String, val title: String, val emojiParticles: Boolean) {
+    CONFETTI(1, "🎉", "Confetti", false),
+    HEARTS(2, "❤️", "Hearts", true),
+    FIREWORKS(3, "🎆", "Fireworks", false),
+    BALLOONS(4, "🎈", "Balloons", true),
+    LASERS(5, "🔦", "Lasers", false),
+    SNOW(6, "❄️", "Snow", true),
+    SPARKLES(7, "✨", "Sparkles", true),
+    FIRE(8, "🔥", "Fire", true);
+    companion object { fun of(id: Int) = entries.firstOrNull { it.id == id } }
+}
+
 enum class GamePhase { INVITED_ME, WAITING_ACCEPT, PLAYING, COUNTDOWN, GO, DONE }
 
 data class GameState(
@@ -133,6 +146,9 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
     val blast: StateFlow<String?> = _blast.asStateFlow()
     private val _game = MutableStateFlow<GameState?>(null)
     val game: StateFlow<GameState?> = _game.asStateFlow()
+
+    private val _effect = MutableStateFlow<MessageEffect?>(null)
+    val effect: StateFlow<MessageEffect?> = _effect.asStateFlow()
 
     private val _todos = MutableStateFlow<List<TodoItem>>(emptyList())
     val todos: StateFlow<List<TodoItem>> = _todos.asStateFlow()
@@ -192,6 +208,10 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
                 prefs.edit().putString("partner_mood", m).apply()
             }
             A.TODO -> onTodo(r)
+            A.EFFECT -> MessageEffect.of(r.b().toInt())?.let { e ->
+                if (g.settings.current.animations != com.wristradar.data.AnimationLevel.OFF) _effect.value = e
+                buzz(longArrayOf(0, 40, 40, 40))
+            }
             A.GAME -> onGame(r)
         }
     }
@@ -207,6 +227,20 @@ class FunHub(private val ctx: Context, private val g: AppGraph, private val engi
     }
 
     fun clearBlast() { _blast.value = null }
+
+    // ------------------------------------------------------------------ message effects
+
+    /** Plays the effect here and sends it to the friend (only if connected - effects aren't queued). */
+    fun sendEffect(e: MessageEffect) {
+        previewEffect(e)
+        send(A.EFFECT, Out().b(e.id.toByte()).build())
+    }
+
+    fun previewEffect(e: MessageEffect) {
+        if (g.settings.current.animations != com.wristradar.data.AnimationLevel.OFF) _effect.value = e
+    }
+
+    fun clearEffect() { _effect.value = null }
 
     // ------------------------------------------------------------------ tap code
 

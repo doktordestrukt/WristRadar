@@ -412,7 +412,7 @@ fun AppearanceScreen(nav: NavHostController) {
                 if (AppIconSwitcher.set(ctx, next)) g.settings.update { it.copy(appIcon = next) }
             }, secondary = s.appIcon.label + " (tap to change)")
         }
-        item { Hint("The new app icon can take a moment to appear in the app list.") }
+        item { Hint("\"Matches your theme\" changes the icon whenever you pick a theme. It can take a moment to update in the app list.") }
         item { SectionLabel("Style") }
         item {
             val fonts = com.wristradar.data.FontChoice.entries
@@ -427,6 +427,7 @@ fun AppearanceScreen(nav: NavHostController) {
         item { WrToggle("Gradient buttons", s.buttonGradient, "Colour fade on every button") { v -> g.settings.update { it.copy(buttonGradient = v) } } }
         item { WrToggle("Dynamic Island", s.dynamicIsland, "Pill at the top for calls, typing and connections") { v -> g.settings.update { it.copy(dynamicIsland = v) } } }
         item { WrToggle("Haptic taps", s.haptics, "A tiny tick when you tap a button") { v -> g.settings.update { it.copy(haptics = v) } } }
+        item { WrToggle("Away mode", s.awayMode, "When your friend is out of reach, home shows only the chat") { v -> g.settings.update { it.copy(awayMode = v) } } }
         item {
             val next = when (s.animations) { AnimationLevel.FULL -> AnimationLevel.REDUCED; AnimationLevel.REDUCED -> AnimationLevel.OFF; AnimationLevel.OFF -> AnimationLevel.FULL }
             WrChip("Animations", { g.settings.update { it.copy(animations = next) } }, secondary = s.animations.name.lowercase().replaceFirstChar { it.uppercase() } + " (tap to change)")
@@ -449,21 +450,34 @@ fun AppearanceScreen(nav: NavHostController) {
 
 /** Swaps the launcher icon by enabling exactly one activity-alias. */
 object AppIconSwitcher {
-    fun set(ctx: android.content.Context, icon: com.wristradar.data.AppIcon): Boolean = runCatching {
+    private fun allAliases() = com.wristradar.data.AppIcon.entries.filter { it.alias.isNotEmpty() }.map { it.alias } +
+        com.wristradar.ui.theme.ThemeIcons.ids.map { com.wristradar.ui.theme.ThemeIcons.alias(it) }
+
+    /** Alias that should be on for this icon choice + theme. */
+    fun aliasFor(icon: com.wristradar.data.AppIcon, themeId: String): String =
+        if (icon != com.wristradar.data.AppIcon.MATCH) icon.alias
+        else if (themeId in com.wristradar.ui.theme.ThemeIcons.ids) com.wristradar.ui.theme.ThemeIcons.alias(themeId)
+        else com.wristradar.data.AppIcon.CLASSIC.alias
+
+    /** Turns on exactly one launcher alias; only touches components whose state actually changes. */
+    fun apply(ctx: android.content.Context, alias: String): Boolean = runCatching {
         val pm = ctx.packageManager
+        val on = android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        val off = android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        fun cn(a: String) = android.content.ComponentName(ctx.packageName, ctx.packageName + a)
         // Enable the new one first so there is never a moment with no launcher icon.
-        pm.setComponentEnabledSetting(
-            android.content.ComponentName(ctx.packageName, ctx.packageName + icon.alias),
-            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP,
-        )
-        com.wristradar.data.AppIcon.entries.filter { it != icon }.forEach {
-            pm.setComponentEnabledSetting(
-                android.content.ComponentName(ctx.packageName, ctx.packageName + it.alias),
-                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP,
-            )
+        if (pm.getComponentEnabledSetting(cn(alias)) != on) pm.setComponentEnabledSetting(cn(alias), on, android.content.pm.PackageManager.DONT_KILL_APP)
+        for (a in allAliases()) if (a != alias) {
+            val st = pm.getComponentEnabledSetting(cn(a))
+            // DEFAULT counts as on for the Classic alias (enabled in the manifest).
+            val isOn = st == on || (st == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && a == com.wristradar.data.AppIcon.CLASSIC.alias)
+            if (isOn) pm.setComponentEnabledSetting(cn(a), off, android.content.pm.PackageManager.DONT_KILL_APP)
         }
         true
     }.getOrDefault(false)
+
+    fun set(ctx: android.content.Context, icon: com.wristradar.data.AppIcon): Boolean =
+        apply(ctx, aliasFor(icon, com.wristradar.WristRadarApp.graph.settings.current.themeId))
 }
 
 /** Preview of every icon pack: tap one to use it. */
@@ -492,10 +506,11 @@ private fun IconPackRow(current: com.wristradar.data.IconPack, onPick: (com.wris
 
 /** Theme folders on the Appearance screen. */
 enum class ThemeFolder(val title: String) {
-    GLASS("Liquid glass"), SOFT("Soft glass"), GRADIENT("Gradients"), DARK("Dark");
+    GLASS("Liquid glass"), GRADIENT_GLASS("Gradient glass"), SOFT("Soft glass"), GRADIENT("Gradients"), DARK("Dark");
     fun themes() = ThemePresets.all.filter {
         when (this) {
-            GLASS -> it.glass && !it.id.startsWith("soft_")
+            GLASS -> it.glass && !it.id.startsWith("soft_") && !it.id.startsWith("gg_")
+            GRADIENT_GLASS -> it.glass && it.id.startsWith("gg_")
             SOFT -> it.glass && it.id.startsWith("soft_")
             GRADIENT -> it.gradient != null && !it.glass
             DARK -> it.gradient == null

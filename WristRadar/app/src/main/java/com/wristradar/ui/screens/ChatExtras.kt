@@ -156,6 +156,11 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "📡 Stronger Bluetooth" to "Max Range now steps down to Bluetooth's most robust long-range mode when your friend is far away, finds them faster while searching and reconnects quicker.",
+        "🎉 Message effects" to "Send a message with confetti, hearts, fireworks, balloons, lasers, snow, sparkles or fire. Tap \"Send with effect\" in the chat.",
+        "🌈 Gradient glass" to "10 new gradient liquid glass themes in their own folder.",
+        "🖼 Icon matches your theme" to "Your app icon now changes to match the theme you pick, and fits the round watch screen perfectly.",
+        "🌙 Away mode" to "While your friend is out of reach, the home screen shows only the chat. Everything comes back when they're near.",
         "🧈 Silkier scrolling" to "The chat no longer redraws itself every time the signal or distance changes, so scrolling stays smooth.",
         "🛟 Stuck messages fixed" to "Messages no longer get stuck on \"sending\" - a dead connection is noticed within seconds and reconnects by itself.",
         "⌨️ Keyboard fix" to "Fixed the black screen that sometimes appeared instead of the keyboard.",

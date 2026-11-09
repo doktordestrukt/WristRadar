@@ -386,7 +386,8 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     private fun onConnectFailed(msg: String) {
         connecting = false
         failCount++
-        nextAttemptAt = now() + minOf(60_000L, 4_000L * failCount)
+        // Retry quickly: at the edge of range a reconnect often works a few seconds later.
+        nextAttemptAt = now() + minOf(20_000L, 3_000L * failCount)
         if (refreshDeadline != 0L || failCount >= 3) { failedAt = now(); setPhase(Phase.FAILED, msg) }
         else setPhase(Phase.SEARCHING, "$msg – retrying")
     }
