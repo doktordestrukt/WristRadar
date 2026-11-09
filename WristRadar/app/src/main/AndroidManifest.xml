@@ -455,6 +455,102 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
+            android:name=".ui.T_kk_nude"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_nude"
+            android:roundIcon="@mipmap/ic_t_kk_nude"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.T_kk_champagne"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_champagne"
+            android:roundIcon="@mipmap/ic_t_kk_champagne"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.T_kk_mocha"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_mocha"
+            android:roundIcon="@mipmap/ic_t_kk_mocha"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.T_kk_cream"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_cream"
+            android:roundIcon="@mipmap/ic_t_kk_cream"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.T_kk_blackgold"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_blackgold"
+            android:roundIcon="@mipmap/ic_t_kk_blackgold"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.T_kk_blush"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_blush"
+            android:roundIcon="@mipmap/ic_t_kk_blush"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.T_kk_sand"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_sand"
+            android:roundIcon="@mipmap/ic_t_kk_sand"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ui.T_kk_diamond"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_t_kk_diamond"
+            android:roundIcon="@mipmap/ic_t_kk_diamond"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
             android:name=".ui.T_soft_blush"
             android:targetActivity=".ui.MainActivity"
             android:icon="@mipmap/ic_t_soft_blush"

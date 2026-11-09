@@ -99,10 +99,16 @@ class MainActivity : ComponentActivity() {
         if (i?.getBooleanExtra(EXTRA_CALL, false) == true) callSignalFlow.value += 1
     }
 
+    private val iconHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val iconSync = Runnable {
+        if (!WristRadarApp.graph.uiVisibility.appVisible) com.wristradar.ui.screens.AppIconSwitcher.syncWhenLeaving(applicationContext)
+    }
+
     override fun onStart() {
         super.onStart()
         val g = WristRadarApp.graph
         g.uiVisibility.appVisible = true
+        iconHandler.removeCallbacks(iconSync)
         g.lock.checkTimeout(foreground = true)
         g.engine.start()
     }
@@ -111,6 +117,9 @@ class MainActivity : ComponentActivity() {
         val g = WristRadarApp.graph
         g.uiVisibility.appVisible = false
         g.engine.stopIfIdle()
+        // Icon changes wait until you've really left (not just opened the keyboard) for a minute.
+        iconHandler.removeCallbacks(iconSync)
+        iconHandler.postDelayed(iconSync, 60_000)
         super.onStop()
     }
 

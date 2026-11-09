@@ -69,7 +69,9 @@ import kotlin.random.Random
 @OptIn(ExperimentalCoroutinesApi::class)
 class RadarEngine(val ctx: Context, private val g: AppGraph) {
 
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
+    /** One background task failing must never take the whole app down (it's logged instead). */
+    private val crashGuard = kotlinx.coroutines.CoroutineExceptionHandler { _, e -> Log.e(TAG, "background task failed", e) }
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1) + crashGuard)
 
     private val _conn = MutableStateFlow(ConnectionState(if (g.trust.partner.value == null) Phase.NOT_PAIRED else Phase.STANDBY))
     val connection: StateFlow<ConnectionState> = _conn.asStateFlow()

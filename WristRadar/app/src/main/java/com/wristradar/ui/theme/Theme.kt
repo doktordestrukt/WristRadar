@@ -96,12 +96,6 @@ fun WristRadarTheme(settings: Settings, content: @Composable () -> Unit) {
         onSurfaceVariant = p.textDim,
         onError = Color.Black,
     )
-    // App icon follows the theme ("Matches your theme"): switched off the main thread, only on change.
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    androidx.compose.runtime.LaunchedEffect(settings.themeId, settings.appIcon) {
-        val alias = com.wristradar.ui.screens.AppIconSwitcher.aliasFor(settings.appIcon, settings.themeId)
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.wristradar.ui.screens.AppIconSwitcher.apply(ctx.applicationContext, alias) }
-    }
     val bg = settings.gradient?.takeIf { it.size >= 2 }?.let { g -> Brush.linearGradient(g.map { Color(it) }) }
     MaterialTheme(colors = colors, typography = Typography(defaultFontFamily = settings.font.family())) {
         CompositionLocalProvider(

@@ -157,6 +157,8 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "✨ KK themes" to "8 new KK liquid glass themes: Nude, Champagne, Mocha, Cream, Black & Gold, Blush Nude, Sand and Diamond.",
+        "🩹 Fixed: app closing after the PIN" to "Changing the app icon made Samsung close WristRadar. The icon now only changes a minute after you leave the app.",
         "🔑 A new key for every message" to "Each message is locked with its own key, destroyed right after use. Even a stolen key can't open a single older message.",
         "♻️ Faster healing" to "A completely fresh key exchange every hour when idle (was every 3 hours).",
         "🤝 Top-level pairing" to "New pairings use ML-KEM-1024 and ML-DSA-87 too, when both watches have MK17.",

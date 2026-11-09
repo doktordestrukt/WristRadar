@@ -418,7 +418,7 @@ fun AppearanceScreen(nav: NavHostController) {
                 if (AppIconSwitcher.set(ctx, next)) g.settings.update { it.copy(appIcon = next) }
             }, secondary = s.appIcon.label + " (tap to change)")
         }
-        item { Hint("\"Matches your theme\" changes the icon whenever you pick a theme. It can take a moment to update in the app list.") }
+        item { Hint("The icon changes after you leave WristRadar (changing it while the app is open would close it on Samsung watches). It can take a moment to update in the app list.") }
         item { SectionLabel("Style") }
         item {
             val fonts = com.wristradar.data.FontChoice.entries
@@ -482,8 +482,21 @@ object AppIconSwitcher {
         true
     }.getOrDefault(false)
 
-    fun set(ctx: android.content.Context, icon: com.wristradar.data.AppIcon): Boolean =
-        apply(ctx, aliasFor(icon, com.wristradar.WristRadarApp.graph.settings.current.themeId))
+    /**
+     * Samsung watches kill the app the moment the launcher entry it was opened from is switched
+     * off (whatever DONT_KILL_APP says). So the icon is never changed while the app is open:
+     * [syncWhenLeaving] runs from MainActivity.onStop and only switches if the icon is wrong.
+     */
+    fun syncWhenLeaving(ctx: android.content.Context) {
+        val s = com.wristradar.WristRadarApp.graph.settings.current
+        val alias = aliasFor(s.appIcon, s.themeId)
+        val app = ctx.applicationContext
+        Thread { apply(app, alias) }.start()
+    }
+
+    /** Picking an icon only saves the choice; it's applied when you leave the app. */
+    @Suppress("UNUSED_PARAMETER")
+    fun set(ctx: android.content.Context, icon: com.wristradar.data.AppIcon): Boolean = true
 }
 
 /** Preview of every icon pack: tap one to use it. */
@@ -512,10 +525,11 @@ private fun IconPackRow(current: com.wristradar.data.IconPack, onPick: (com.wris
 
 /** Theme folders on the Appearance screen. */
 enum class ThemeFolder(val title: String) {
-    GLASS("Liquid glass"), GRADIENT_GLASS("Gradient glass"), SOFT("Soft glass"), GRADIENT("Gradients"), DARK("Dark");
+    GLASS("Liquid glass"), GRADIENT_GLASS("Gradient glass"), SOFT("Soft glass"), KK("KK"), GRADIENT("Gradients"), DARK("Dark");
     fun themes() = ThemePresets.all.filter {
         when (this) {
-            GLASS -> it.glass && !it.id.startsWith("soft_") && !it.id.startsWith("gg_")
+            GLASS -> it.glass && !it.id.startsWith("soft_") && !it.id.startsWith("gg_") && !it.id.startsWith("kk_")
+            KK -> it.id.startsWith("kk_")
             GRADIENT_GLASS -> it.glass && it.id.startsWith("gg_")
             SOFT -> it.glass && it.id.startsWith("soft_")
             GRADIENT -> it.gradient != null && !it.glass
