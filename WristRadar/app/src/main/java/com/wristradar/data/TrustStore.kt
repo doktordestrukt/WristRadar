@@ -34,9 +34,25 @@ class TrustStore(context: Context, private val vault: KeystoreVault) {
         return Partner(Base64.decode(id, Base64.NO_WRAP), psk, prefs.getLong("paired_at", 0L))
     }
 
+    /**
+     * The friend's ML-DSA-87 public key, learned over an already-authenticated encrypted session
+     * (first one wins; it can't be swapped later without pairing again). Keystore-sealed so a
+     * changed file is detected.
+     */
+    val partnerPq: ByteArray?
+        get() = prefs.getString("peer_pq", null)?.let { vault.decrypt(Base64.decode(it, Base64.NO_WRAP), "wr-peer-mldsa87") }
+
+    fun savePartnerPq(pub: ByteArray): Boolean {
+        val cur = partnerPq
+        if (cur != null) return cur.contentEquals(pub)
+        prefs.edit().putString("peer_pq", Base64.encodeToString(vault.encrypt(pub, "wr-peer-mldsa87"), Base64.NO_WRAP)).commit()
+        return true
+    }
+
     fun save(identityKey: ByteArray, psk: ByteArray) {
         val now = System.currentTimeMillis()
         prefs.edit()
+            .remove("peer_pq")
             .putString("peer_id", Base64.encodeToString(identityKey, Base64.NO_WRAP))
             .putString("psk_enc", Base64.encodeToString(vault.encrypt(psk, "wr-psk"), Base64.NO_WRAP))
             .putLong("paired_at", now)

@@ -264,9 +264,9 @@ fun PrivacyScreen(nav: NavHostController) {
         item { KeyValue("Your fingerprint", g.identity.fingerprint()) }
         partner?.let { pt -> item { KeyValue("Partner fingerprint", IdentityManager.fingerprintOf(pt.identityKey)) } }
         item {
-            val kem = g.engine.sessionKem
-            KeyValue("Encryption", "X25519 + ${kem?.label ?: "ML-KEM-1024"} (post-quantum) key agreement, Ed25519 identities, AES-256-GCM per message, fresh keys every session" +
-                (if (kem == null) "" else "\nThis connection: ${kem.label}"))
+            val su = g.engine.sessionSuite
+            KeyValue("Encryption", "AES-256-GCM per message. Keys: X25519 + ML-KEM-1024 (post-quantum). Identity: Ed25519 + ML-DSA-87 (post-quantum). Hashing: SHA-384 / HKDF-SHA-384. Fresh keys every session." +
+                (if (su == null) "" else "\nThis connection: ${su.title}"))
         }
         item {
             KeyValue("Stored on watch", "Keys and messages encrypted with an Android Keystore key. Nothing leaves the watch except to your partner.")
@@ -652,6 +652,7 @@ fun BlackboxSettingsScreen(nav: NavHostController) {
         }
         item { WrToggle("Intruder screen sound", s.blackboxSound, "Glitch effects if this watch is ever refused") { v -> g.settings.update { it.copy(blackboxSound = v) } } }
         item { WrToggle("Intruder screen music", s.blackboxMusic, "Loops on the skull screen") { v -> g.settings.update { it.copy(blackboxMusic = v) } } }
+        item { WrChip("Preview intruder screen", { g.blackbox.preview() }, secondary = "See and hear what someone gets when your watch refuses them", icon = { Text("💀", fontSize = 16.sp) }) }
         item { WrToggle("Warning vibration", s.blackboxVibration) { v -> g.settings.update { it.copy(blackboxVibration = v) } } }
         item { WrChip("Security log", { nav.navigate("securitylog") }, secondary = "${log.size} event(s) on this watch", icon = { Icon(Icons.Filled.Lock, null) }) }
     }

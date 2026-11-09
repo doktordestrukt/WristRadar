@@ -35,6 +35,21 @@ class IdentityManager(context: Context, private val vault: KeystoreVault) : Sign
 
     override fun sign(data: ByteArray): ByteArray = Ed25519Sign(seed).sign(data)
 
+    /**
+     * Post-quantum identity (ML-DSA-87), created the first time it's needed. The private key is
+     * stored only Keystore-encrypted, like the Ed25519 seed.
+     */
+    val pq: MlDsa.KeyPair by lazy {
+        val pub = prefs.getString(KEY_PQ_PUB, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
+        val priv = prefs.getString(KEY_PQ_PRIV, null)?.let { vault.decrypt(Base64.decode(it, Base64.NO_WRAP), AAD_PQ) }
+        if (pub != null && priv != null) MlDsa.restore(pub, priv) else MlDsa.generate().also { kp ->
+            prefs.edit()
+                .putString(KEY_PQ_PRIV, Base64.encodeToString(vault.encrypt(kp.privateEncoded, AAD_PQ), Base64.NO_WRAP))
+                .putString(KEY_PQ_PUB, Base64.encodeToString(kp.publicKey, Base64.NO_WRAP))
+                .commit()
+        }
+    }
+
     /** Short human-readable fingerprint, e.g. for the About / partner screens. */
     fun fingerprint(): String = fingerprintOf(publicKey)
 
@@ -42,6 +57,9 @@ class IdentityManager(context: Context, private val vault: KeystoreVault) : Sign
         private const val KEY_SEED = "seed_enc"
         private const val KEY_PUB = "pub"
         private const val AAD = "wr-identity-seed"
+        private const val KEY_PQ_PRIV = "pq_priv_enc"
+        private const val KEY_PQ_PUB = "pq_pub"
+        private const val AAD_PQ = "wr-identity-mldsa87"
 
         fun fingerprintOf(pub: ByteArray): String =
             Crypto.sha256(pub).copyOf(6).toHex().uppercase().chunked(4).joinToString(" ")

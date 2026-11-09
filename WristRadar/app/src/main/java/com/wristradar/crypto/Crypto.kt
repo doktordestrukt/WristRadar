@@ -14,7 +14,8 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Thin wrappers over established primitives only:
  *  - X25519 / Ed25519 / HKDF from Google Tink
- *  - AES-256-GCM, HMAC-SHA256, SHA-256 from the platform JCA (Conscrypt/BoringSSL)
+ *  - AES-256-GCM, HMAC-SHA-256/384, SHA-256/384 from the platform JCA (Conscrypt/BoringSSL)
+ *  - ML-KEM and ML-DSA (post-quantum) from BouncyCastle, in MlKem / MlDsa
  * Nothing here is a custom cipher; protocols built on top are documented in SECURITY.md.
  */
 object Crypto {
@@ -30,6 +31,23 @@ object Crypto {
 
     fun hkdf(ikm: ByteArray, salt: ByteArray?, info: String, len: Int = 32): ByteArray =
         Hkdf.computeHkdf("HMACSHA256", ikm, salt ?: ByteArray(0), info.toByteArray(Charsets.UTF_8), len)
+
+    /** SHA-384 (suite V4, CNSA 2.0 level). */
+    fun sha384(vararg parts: ByteArray): ByteArray {
+        val md = MessageDigest.getInstance("SHA-384")
+        for (p in parts) md.update(p)
+        return md.digest()
+    }
+
+    /** HKDF built on HMAC-SHA-384 (suite V4). Output defaults to 32 bytes = one AES-256 key. */
+    fun hkdf384(ikm: ByteArray, salt: ByteArray?, info: String, len: Int = 32): ByteArray =
+        Hkdf.computeHkdf("HMACSHA384", ikm, salt ?: ByteArray(0), info.toByteArray(Charsets.UTF_8), len)
+
+    fun hmac384(key: ByteArray, data: ByteArray): ByteArray {
+        val mac = Mac.getInstance("HmacSHA384")
+        mac.init(SecretKeySpec(key, "HmacSHA384"))
+        return mac.doFinal(data)
+    }
 
     fun hmac(key: ByteArray, data: ByteArray): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")

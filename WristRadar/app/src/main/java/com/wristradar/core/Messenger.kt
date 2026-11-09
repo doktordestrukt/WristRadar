@@ -96,6 +96,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
             A.OPENED -> Unit   // secret messages removed in V5
             A.BLAST, A.GAME, A.TAPS, A.TODO, A.MOOD, A.EFFECT -> engine.extras.handle(type, p)
             A.SOS -> Unit   // SOS removed in V6
+            A.PQ_ID -> engine.onPartnerPqIdentity(p)
             A.NUDGE -> {
                 g.notifier.nudge()
                 insertInfo("👋 ${g.profile.partnerName.value ?: "Your friend"} nudged you")

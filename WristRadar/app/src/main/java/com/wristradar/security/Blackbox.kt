@@ -122,6 +122,14 @@ class Blackbox(
         if (!ui.appVisible) notifier.showBlackbox("Access denied by a protected watch", deviceName ?: "UNKNOWN DEVICE")
     }
 
+    /** Shows the intruder screen (skull + music) on this watch without any real event. */
+    fun preview() {
+        _alert.value = BlackboxAlert(
+            null, "Preview of what someone sees after being refused by your watch.",
+            "PREVIEW", null, System.currentTimeMillis(), deniedHere = true, preview = true,
+        )
+    }
+
     fun dismiss() {
         _alert.value = null
         notifier.cancelBlackbox()

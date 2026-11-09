@@ -157,6 +157,8 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "🛡 Top-secret grade encryption" to "When both watches have MK16: ML-KEM-1024 keys, ML-DSA-87 + Ed25519 identity signatures, and SHA-384 / HKDF-SHA-384 - the CNSA 2.0 style suite.",
+        "💀 Intruder screen fixed" to "Someone refused by your watch now really gets the skull and music. Preview it in Settings › Blackbox security.",
         "🔐 App lock PIN" to "Lock WristRadar with a 4-6 digit PIN, asked every 30 minutes (you can change how often). Settings › Privacy.",
         "🛡 Stronger encryption" to "Connections now use ML-KEM-1024, the strongest standard post-quantum key exchange, once both watches have this version.",
         "📡 Stronger Bluetooth" to "Max Range now steps down to Bluetooth's most robust long-range mode when your friend is far away, finds them faster while searching and reconnects quicker.",

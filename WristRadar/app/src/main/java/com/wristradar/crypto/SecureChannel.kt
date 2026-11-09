@@ -13,6 +13,9 @@ import java.nio.ByteBuffer
  *         REKEY_MS; old keys are discarded, so a later key compromise cannot read earlier traffic.
  */
 class SecureChannel(keys: SessionKeys, private val isClient: Boolean) {
+    /** Suite V4 ratchets with HKDF-SHA-384; older suites keep HKDF-SHA-256 (both sides agree via the handshake). */
+    private val wide = keys.suite.wide
+    private fun ratchet(k: ByteArray) = if (wide) Crypto.hkdf384(k, null, "wr rekey") else Crypto.hkdf(k, null, "wr rekey")
 
     private var sKey = keys.sendKey.copyOf()
     private var sEpoch = 0
@@ -30,7 +33,7 @@ class SecureChannel(keys: SessionKeys, private val isClient: Boolean) {
     @Synchronized
     fun seal(plain: ByteArray): ByteArray {
         if (sRecordsInEpoch >= REKEY_RECORDS || System.currentTimeMillis() - sEpochStart > REKEY_MS) {
-            val next = Crypto.hkdf(sKey, null, "wr rekey")
+            val next = ratchet(sKey)
             Crypto.wipe(sKey)
             sKey = next
             sEpoch = (sEpoch + 1) and 0xff
@@ -62,7 +65,7 @@ class SecureChannel(keys: SessionKeys, private val isClient: Boolean) {
         return when (epoch) {
             rEpoch -> Crypto.gcmOpen(rKey, nonce(recvDir, ctr), ct, header)?.also { rLast = ctr }
             (rEpoch + 1) and 0xff -> {
-                val next = Crypto.hkdf(rKey, null, "wr rekey")
+                val next = ratchet(rKey)
                 Crypto.gcmOpen(next, nonce(recvDir, ctr), ct, header)?.also {
                     Crypto.wipe(rKey)
                     rKey = next; rEpoch = epoch; rLast = ctr

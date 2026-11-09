@@ -79,6 +79,11 @@ object A {
     const val OPENED: Byte = 0x63
     /** Message effect (MK14+): effect id byte. Plays full screen on the partner's watch. */
     const val EFFECT: Byte = 0x64
+    /**
+     * Post-quantum identity (MK16+): ML-DSA-87 public key + proof of possession, i.e. its
+     * signature over "WR-PQID" | sender's Ed25519 key. Only sent inside an authenticated session.
+     */
+    const val PQ_ID: Byte = 0x65
 }
 
 class Out {

@@ -176,12 +176,47 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     @Volatile var sessionKem: com.wristradar.crypto.MlKem.Level? = null
         private set
     @Volatile private var strongKemFailed = false
+    /** Suite of the current session (null = not connected). */
+    @Volatile var sessionSuite: com.wristradar.crypto.Suite? = null
+        private set
+    @Volatile private var pqSentFor: SecureSession? = null
+
+    /** My ML-DSA-87 identity + the friend's, or null while we don't have theirs yet. */
+    private fun pqIdentity(): com.wristradar.crypto.PqIdentity? {
+        val theirs = g.trust.partnerPq ?: return null
+        return runCatching { com.wristradar.crypto.PqIdentity(g.identity.pq, theirs) }.getOrNull()
+    }
+
+    /** Sends my post-quantum identity once per session to a friend whose app understands it. */
+    fun maybeSendPqIdentity() {
+        val s = currentSession() ?: return
+        if (pqSentFor === s || updater.knownPartnerCode < SUITE_V4_SINCE) return
+        pqSentFor = s
+        scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val kp = g.identity.pq
+            val pop = kp.sign("WR-PQID".toByteArray() + g.identity.publicKey)
+            s.send(com.wristradar.protocol.A.PQ_ID, com.wristradar.protocol.Out().bytes(kp.publicKey).bytes(pop).build())
+        }
+    }
+
+    /** Friend's post-quantum identity arrived over our authenticated session. */
+    fun onPartnerPqIdentity(p: ByteArray) {
+        val partner = g.trust.partner.value ?: return
+        val r = com.wristradar.protocol.In(p)
+        val pub = r.bytes(com.wristradar.crypto.MlDsa.PUBLIC_KEY_SIZE + 16) ?: return
+        val pop = r.bytes(com.wristradar.crypto.MlDsa.SIGNATURE_SIZE + 16) ?: return
+        if (!com.wristradar.crypto.MlDsa.verify(pub, pop, "WR-PQID".toByteArray() + partner.identityKey)) {
+            Log.w(TAG, "post-quantum identity: bad proof of possession"); return
+        }
+        if (!g.trust.savePartnerPq(pub)) Log.w(TAG, "post-quantum identity changed without re-pairing - ignored")
+    }
     /** Friend version for which ML-KEM-1024 failed: don't retry until they install a different one (no reconnect loops). */
     @Volatile private var strongFailedAtCode = -1
 
     /** Friend's app version just arrived: a new version gets another chance at ML-KEM-1024. */
     fun onPartnerVersion(code: Int) {
         if (code >= KEM1024_SINCE && code != strongFailedAtCode) strongKemFailed = false
+        maybeSendPqIdentity()
     }
     /** Last time the current session delivered a valid message (the friend sends status at least every 45 s). */
     @Volatile private var lastInbound = 0L
@@ -371,8 +406,10 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         // ML-KEM-1024 once we know the friend's app understands it; otherwise (or if that just
         // failed) the ML-KEM-768 handshake every version speaks.
         val strong = updater.knownPartnerCode >= KEM1024_SINCE && !strongKemFailed
+        // Top suite V4 (adds ML-DSA-87 + SHA-384) once we hold the friend's post-quantum identity.
+        val pq = if (strong && updater.knownPartnerCode >= SUITE_V4_SINCE) pqIdentity() else null
         val hc = HandshakeClient(g.identity, partner.identityKey, partner.psk,
-            if (strong) com.wristradar.crypto.MlKem.Level.ML_KEM_1024 else com.wristradar.crypto.MlKem.Level.ML_KEM_768)
+            if (strong) com.wristradar.crypto.MlKem.Level.ML_KEM_1024 else com.wristradar.crypto.MlKem.Level.ML_KEM_768, pq)
         val resp = request(link, frame(F.HS_HELLO, hc.hello()), setOf(F.HS_SERVER, F.HS_REJECT, F.BLACKBOX), 10_000)
         if (resp != null && resp[0] == F.BLACKBOX) {
             link.close()
@@ -387,6 +424,12 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             return
         }
         val res = hc.onServer(resp.copyOfRange(1, resp.size))
+        if (res == null && hc.failedOnlyPq) {
+            // Friend proved PSK + Ed25519 but the post-quantum key didn't match: fall back, no alarm.
+            Log.w(TAG, "suite V4 signature mismatch - falling back")
+            strongKemFailed = true; strongFailedAtCode = updater.knownPartnerCode
+            link.close(); onConnectFailed("Retrying with compatible encryption"); return
+        }
         if (res == null) {
             // It advertised our partner's secret rolling token yet cannot prove the partner's identity.
             g.blackbox.report(ThreatType.IMPERSONATION, "Handshake response failed signature/PSK verification", link)
@@ -425,6 +468,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         val s = SecureSession(link, SecureChannel(keys, link.isClient))
         session = s
         sessionKem = keys.kem
+        sessionSuite = keys.suite
         lastInbound = now()
         authenticatedLinks += link.id
         renewing = false
@@ -518,14 +562,16 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
                 }
                 s.inbox.trySend(plain)
             }
-            F.BLACKBOX -> Unit   // only meaningful as a handshake reply (handled by the waiter)
+            // A protected watch refused us (wrong keys during a handshake or pairing): show the
+            // intruder screen here. Never on a link that already finished a genuine handshake.
+            F.BLACKBOX -> if (l.id !in authenticatedLinks) g.blackbox.accessDeniedHere(l.deviceName, l.address)
         }
     }
 
     private fun onHello(l: Link, f: ByteArray) {
         val partner = g.trust.partner.value
         if (l.isClient || partner == null) { reject(l); return }
-        val hs = HandshakeServer(g.identity, partner.identityKey, partner.psk)
+        val hs = HandshakeServer(g.identity, partner.identityKey, partner.psk, pqIdentity())
         val resp = hs.onHello(f.copyOfRange(1, f.size)) ?: run { reject(l); return }
         serverHandshakes[l.id] = hs
         if (currentSession() == null) setPhase(Phase.AUTHENTICATING, "Verifying partner identity…")
@@ -535,6 +581,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     private fun onFinish(l: Link, f: ByteArray) {
         val hs = serverHandshakes.remove(l.id) ?: return
         val keys = hs.onFinish(f.copyOfRange(1, f.size))
+        if (keys == null && hs.failedOnlyPq) { Log.w(TAG, "suite V4 client signature mismatch"); reject(l); return }
         if (keys == null) {
             g.blackbox.report(ThreatType.AUTH_FAILED, "Handshake finish failed identity/PSK verification", l)
             sendBlackbox(l)
@@ -562,6 +609,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             session?.close()
             session = null
             sessionKem = null
+            sessionSuite = null
             g.trust.markPartnerSeen()
             calls.onLinkLost()
             updater.onSessionDown()
@@ -613,12 +661,16 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             scope.launch { oldestUnackedAt = messenger.oldestUnackedTextAt() }
         }
         // Upgrade a 768 session to ML-KEM-1024 as soon as both sides support it (client starts it, when idle).
-        if (s != null && s.link.isClient && sessionKem == com.wristradar.crypto.MlKem.Level.ML_KEM_768 &&
-            updater.knownPartnerCode >= KEM1024_SINCE && !strongKemFailed &&
+        val canUpgrade = when (sessionSuite) {
+            com.wristradar.crypto.Suite.V2 -> updater.knownPartnerCode >= KEM1024_SINCE
+            com.wristradar.crypto.Suite.V3 -> updater.knownPartnerCode >= SUITE_V4_SINCE && g.trust.partnerPq != null
+            else -> false
+        }
+        if (s != null && s.link.isClient && canUpgrade && !strongKemFailed &&
             t - lastActivity > 15_000 && !messenger.busy && !calls.state.value.live
         ) {
             renewing = true
-            Log.i(TAG, "upgrading session to ML-KEM-1024")
+            Log.i(TAG, "upgrading session from $sessionSuite")
             s.close()
             return
         }
@@ -839,6 +891,8 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         private const val SIMULTANEOUS_MS = 8_000L
         /** First versionCode that speaks the ML-KEM-1024 handshake. */
         const val KEM1024_SINCE = 17
+        /** First versionCode with suite V4 (ML-DSA-87 + SHA-384) and PQ_ID. */
+        const val SUITE_V4_SINCE = 18
         private const val ACTIVE_MS = 60_000L
         private const val SEARCH_HARD_MS = 120_000L
         private const val BOOST_MS = 60_000L
