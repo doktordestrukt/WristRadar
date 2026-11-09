@@ -37,6 +37,8 @@ import com.wristradar.WristRadarApp
 import com.wristradar.audio.CallState
 import com.wristradar.core.Phase
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 private data class IslandContent(val dot: Color?, val text: String)
 
@@ -49,8 +51,9 @@ fun DynamicIsland() {
     val g = WristRadarApp.graph
     val call by g.engine.calls.state.collectAsState()
     val presence by g.engine.presence.collectAsState()
-    val conn by g.engine.connection.collectAsState()
-    val connected = conn.phase == Phase.CONNECTED
+    // Only "connected or not" - not every signal update (this overlay sits above every screen).
+    val connected by remember { g.engine.connection.map { it.phase == Phase.CONNECTED }.distinctUntilChanged() }
+        .collectAsState(g.engine.connection.value.phase == Phase.CONNECTED)
 
     // Short "Connected" / "Out of range" flash when the connection changes.
     var flash by remember { mutableStateOf<IslandContent?>(null) }

@@ -58,12 +58,17 @@ fun TiltSensor(enabled: Boolean) {
         val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val acc = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val l = object : SensorEventListener {
+            var fx = GlassFx.tiltX
+            var fy = GlassFx.tiltY
             override fun onSensorChanged(e: SensorEvent) {
                 val tx = (-e.values[0] / 6f).coerceIn(-1f, 1f)
                 val ty = (e.values[1] / 6f).coerceIn(-1f, 1f)
                 // low-pass so the gleam glides instead of jittering
-                GlassFx.tiltX += (tx - GlassFx.tiltX) * 0.08f
-                GlassFx.tiltY += (ty - GlassFx.tiltY) * 0.08f
+                fx += (tx - fx) * 0.08f
+                fy += (ty - fy) * 0.08f
+                // Dead-band: only redraw the glass when the gleam would visibly move.
+                if (kotlin.math.abs(fx - GlassFx.tiltX) > 0.006f) GlassFx.tiltX = fx
+                if (kotlin.math.abs(fy - GlassFx.tiltY) > 0.006f) GlassFx.tiltY = fy
             }
             override fun onAccuracyChanged(s: Sensor?, a: Int) = Unit
         }

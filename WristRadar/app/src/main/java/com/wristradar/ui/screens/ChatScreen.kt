@@ -1,5 +1,8 @@
 package com.wristradar.ui.screens
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+
 import android.graphics.Bitmap
 import android.text.format.DateFormat
 import androidx.compose.animation.core.Animatable
@@ -90,7 +93,10 @@ fun ChatScreen(nav: NavHostController) {
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
     val messages by g.messages.messages.collectAsState(initial = null)
-    val conn by g.engine.connection.collectAsState()
+    // Only the bits the chat shows: signal/distance updates many times a second and must not
+    // rebuild the message list each time.
+    val phase by remember { g.engine.connection.map { it.phase }.distinctUntilChanged() }.collectAsState(g.engine.connection.value.phase)
+    val remoteBattery by remember { g.engine.connection.map { it.remoteBattery }.distinctUntilChanged() }.collectAsState(g.engine.connection.value.remoteBattery)
     val partnerName by g.profile.partnerName.collectAsState()
     val partnerAvatar by g.profile.partnerAvatar.collectAsState()
     val partner by g.trust.partner.collectAsState()
@@ -121,6 +127,10 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     val list = messages
+    val byId = remember(list) { list?.associateBy { it.id }.orEmpty() }
+    val lastOutId = remember(list) { list?.lastOrNull { it.outgoing && !it.isInfo && !it.isAlert }?.id }
+    val zone = remember { java.time.ZoneId.systemDefault() }
+    val days = remember(list) { list?.map { java.time.Instant.ofEpochMilli(it.localTime).atZone(zone).toLocalDate() }.orEmpty() }
     var restored by remember { mutableStateOf(false) }
     LaunchedEffect(list?.size) {
         if (list == null) return@LaunchedEffect
@@ -161,24 +171,24 @@ fun ChatScreen(nav: NavHostController) {
                     val mood by g.engine.extras.partnerMood.collectAsState()
                     mood?.let { Text(it, fontSize = 9.sp, color = p.textDim, maxLines = 1) }
                     val extra = listOfNotNull(
-                        conn.remoteBattery?.takeIf { conn.phase == Phase.CONNECTED }?.let { "🔋$it%" },
+                        remoteBattery?.takeIf { phase == Phase.CONNECTED }?.let { "🔋$it%" },
                         if (g.settings.state.collectAsState().value.muted) "🔕" else null,
                     )
                     if (extra.isNotEmpty()) Text(extra.joinToString(" "), fontSize = 9.sp, color = p.textDim)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        StatusDot(conn.phase, 6.dp)
-                        val streak = list?.let { streakDays(it) } ?: 0
+                        StatusDot(phase, 6.dp)
+                        val streak = remember(list) { list?.let { streakDays(it) } ?: 0 }
                         if (streak > 0) Text("🔥$streak ", fontSize = 10.sp, color = p.warning)
                         androidx.compose.animation.AnimatedContent(presence.partnerTyping, label = "typing") { typing ->
                             if (typing) Text("typing…", fontSize = 10.sp, color = p.primary)
-                            else Text(presenceText(conn.phase == Phase.CONNECTED, lastSeen), fontSize = 10.sp, color = phaseColor(conn.phase))
+                            else Text(presenceText(phase == Phase.CONNECTED, lastSeen), fontSize = 10.sp, color = phaseColor(phase))
                         }
                     }
                 }
                 Spacer(Modifier.width(6.dp))
                 Button(
                     onClick = { if (g.engine.calls.startCall()) nav.navigate("call") },
-                    enabled = conn.phase == Phase.CONNECTED,
+                    enabled = phase == Phase.CONNECTED,
                     modifier = Modifier.size(30.dp),
                     colors = ButtonDefaults.buttonColors(backgroundColor = p.connection.copy(alpha = 0.85f), contentColor = p.background),
                 ) { Icon(Icons.Filled.Call, "Call", modifier = Modifier.size(16.dp)) }
@@ -207,11 +217,9 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
         if (list != null && list.isEmpty()) item { Hint("No messages yet. Say hi 👋") }
-        val byId = list?.associateBy { it.id }.orEmpty()
-        val lastOutId = list?.lastOrNull { it.outgoing && !it.isInfo && !it.isAlert }?.id
         var lastDay: java.time.LocalDate? = null
-        list?.forEach { m ->
-            val day = java.time.Instant.ofEpochMilli(m.localTime).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        list?.forEachIndexed { idx, m ->
+            val day = days[idx]
             if (day != lastDay) {
                 lastDay = day
                 item(key = "day-$day") { DayDivider(day) }
@@ -290,7 +298,7 @@ fun ChatScreen(nav: NavHostController) {
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    CompactChip(onClick = { g.engine.messenger.nudge() }, enabled = conn.phase == Phase.CONNECTED,
+                    CompactChip(onClick = { g.engine.messenger.nudge() }, enabled = phase == Phase.CONNECTED,
                         label = { Text("👋 Nudge", fontSize = 11.sp) },
                         colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
                     CompactChip(onClick = { nav.navigate("walk") }, label = { Text("🚶 Walk", fontSize = 11.sp) },

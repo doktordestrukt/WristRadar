@@ -773,10 +773,19 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             .map { NearbyUser(it.id, it.name, it.avatar, it.est.smoothedRssi?.roundToInt() ?: -127, it.est.distanceMetres(g.settings.current.rssiAt1m), it.lastSeen) }
     }
 
+    private var lastDistancePublish = 0L
+
+    /** Throttled + rounded so the UI isn't redrawn for every Bluetooth scan result. */
     private fun publishDistance() {
-        _conn.update {
-            it.copy(rssi = partnerEst.smoothedRssi?.roundToInt(), distanceM = partnerEst.distanceMetres(g.settings.current.rssiAt1m), remoteBattery = remoteBattery)
-        }
+        val t = now()
+        val rssi = partnerEst.smoothedRssi?.roundToInt()
+        val d = partnerEst.distanceMetres(g.settings.current.rssiAt1m)?.let { Math.round(it * 10) / 10.0 }
+        val cur = _conn.value
+        if (cur.rssi == rssi && cur.distanceM == d && cur.remoteBattery == remoteBattery) return
+        val important = (cur.distanceM == null) != (d == null) || cur.remoteBattery != remoteBattery
+        if (!important && t - lastDistancePublish < 250) return
+        lastDistancePublish = t
+        _conn.update { it.copy(rssi = rssi, distanceM = d, remoteBattery = remoteBattery) }
     }
 
     private fun setPhase(p: Phase, detail: String) {

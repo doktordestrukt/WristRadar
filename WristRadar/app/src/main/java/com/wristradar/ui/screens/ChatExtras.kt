@@ -156,6 +156,7 @@ fun WhatsNewScreen(nav: NavHostController) {
 /** Release notes for the current version. Update this list with every new APK. */
 object WhatsNew {
     val items = listOf(
+        "🧈 Silkier scrolling" to "The chat no longer redraws itself every time the signal or distance changes, so scrolling stays smooth.",
         "🛟 Stuck messages fixed" to "Messages no longer get stuck on \"sending\" - a dead connection is noticed within seconds and reconnects by itself.",
         "⌨️ Keyboard fix" to "Fixed the black screen that sometimes appeared instead of the keyboard.",
         "🎮 3 new games" to "Connect 4, Memory Match and Dice Duel. Your friend needs this version too.",
