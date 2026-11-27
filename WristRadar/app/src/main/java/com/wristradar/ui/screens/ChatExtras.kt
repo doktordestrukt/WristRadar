@@ -165,7 +165,7 @@ object WhatsNew {
         "📶 Signal bars fixed" to "Bars now match the distance: right next to each other shows full bars. Tap \"Make distance accurate\" once on the home screen.",
         "⌨️ Keyboard opens first time" to "Typing now opens instantly inside WristRadar - no more tapping twice.",
         "🖼 Your watch photos only" to "The photo button shows pictures stored on your watch - never Google Photos.",
-        "📡 Even more range" to "Long-range mode kicks in sooner and on both watches.",
+        "📡 Range pushed to the limit" to "Bluetooth's most robust long-range mode takes over from a few metres apart on both watches, with smaller packets that survive weak signals, a 5-minute full-power search and more patient reconnects.",
         "🔇 Mute shows in calls" to "When you mute yourself in a call, your friend sees it.",
         "🎆 6 new message effects" to "Bubbles, Rainbow, Shooting stars, Disco, Thunder and Petals.",
     )

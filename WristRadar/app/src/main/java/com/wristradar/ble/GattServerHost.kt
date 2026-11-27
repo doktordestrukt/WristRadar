@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
 class ServerLink(private val host: GattServerHost, val device: BluetoothDevice) :
     Link(isClient = false, address = device.address) {
     @Volatile var mtu = 23
-    override val maxFragment: Int get() = mtu - 3
+    override val maxFragment: Int get() = when (codedLevel) { 8 -> minOf(mtu - 3, 120); 2 -> minOf(mtu - 3, 244); else -> mtu - 3 }
     @get:SuppressLint("MissingPermission")
     override val deviceName: String? get() = runCatching { device.name }.getOrNull()
     override fun writeFragment(bytes: ByteArray) = host.notify(device, bytes)

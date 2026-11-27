@@ -507,7 +507,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
 
     // =================================================================== links & frames
 
-    suspend fun openClientLink(device: BluetoothDevice, attempts: Int = 3, timeoutMs: Long = 15_000): ClientLink? {
+    suspend fun openClientLink(device: BluetoothDevice, attempts: Int = 4, timeoutMs: Long = 20_000): ClientLink? {
         // Android BLE often fails a first connect with status 133; retry like the PC companion does.
         val longRange = g.settings.current.range == RangeMode.MAX && advertiser.longRangeSupported
         repeat(attempts) { attempt ->
@@ -937,7 +937,8 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         /** First versionCode with suite V5 (a new key for every message). */
         const val SUITE_V5_SINCE = 19
         private const val ACTIVE_MS = 60_000L
-        private const val SEARCH_HARD_MS = 120_000L
+        /** Max Range searches at full power for 5 minutes before easing off. */
+        private const val SEARCH_HARD_MS = 300_000L
         private const val BOOST_MS = 60_000L
         /** Brand-new handshake (fresh X25519 + ML-KEM) every hour when idle: heals even a stolen session key. */
         private const val RENEW_MS = 60 * 60 * 1000L

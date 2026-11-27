@@ -25,7 +25,8 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
     @Volatile private var rssiWait: CompletableDeferred<Int?>? = null
 
     // On the long-range PHY each packet takes 4-8x longer on air: smaller fragments lose less.
-    override val maxFragment: Int get() = if (onLongRange) minOf(mtu - 3, 244) else mtu - 3
+    // On long range each packet takes 4-8x longer on air: smaller fragments survive weak signals.
+    override val maxFragment: Int get() = when (codedLevel) { 8 -> minOf(mtu - 3, 120); 2 -> minOf(mtu - 3, 244); else -> mtu - 3 }
     override val deviceName: String? get() = runCatching { device.name }.getOrNull()
 
     suspend fun connect(timeoutMs: Long = 15_000): Boolean {
@@ -152,8 +153,10 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
  */
 object PhyPolicy {
     fun level(rssi: Int, current: Int): Int = when {
-        rssi < -84 || (current == 8 && rssi < -78) -> 8
-        rssi < -72 || (current != 0 && rssi < -64) -> 2
+        // MK18.1 "push it": the most robust mode (Coded S8, ~4x the reach of normal Bluetooth LE)
+        // from a few metres out, S2 almost as soon as you step apart, fast mode only side by side.
+        rssi < -76 || (current == 8 && rssi < -70) -> 8
+        rssi < -66 || (current != 0 && rssi < -58) -> 2
         else -> 0
     }
 }
