@@ -132,6 +132,10 @@ private fun ResultChip(m: ChatMessage, onClick: () -> Unit) {
 fun WhatsNewScreen(nav: NavHostController) {
     val g = WristRadarApp.graph
     val p = LocalPalette.current
+    // Seen once it's on screen - swiping it away must not bring it back next time.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (g.settings.current.seenVersion < BuildConfig.VERSION_CODE) g.settings.update { it.copy(seenVersion = BuildConfig.VERSION_CODE) }
+    }
     WrScreen {
         item { Text("WRISTRADAR ${BuildConfig.RELEASE_LABEL}", style = WrType.title, color = p.primary) }
         item { Text("New version installed", fontSize = 12.sp, color = p.textDim) }
@@ -160,6 +164,15 @@ fun WhatsNewScreen(nav: NavHostController) {
  */
 object WhatsNew {
     val items = listOf(
+        "👥 Group chats" to "Chat with several friends at once. Open \"All chats & groups\" on the home screen and tap New group.",
+        "📞 Group calls" to "Call everyone in a group together - tap the call button in a group chat.",
+        "🤝 More than one friend" to "Pair with up to 6 watches. Each friend gets their own chat; manage them in Settings › Contacts.",
+        "🔏 Signed group messages" to "Every group message is signed by whoever wrote it, so nobody passing it on can change or fake it.",
+        "🕸 Messages hop between friends" to "Group messages reach members you're not paired with through any friend you share.",
+    )
+
+    @Suppress("unused")
+    val history = listOf(
         "🧊 No more freezing" to "Opening the chat and switching screens is instant now - messages are no longer re-decrypted every time anything changes.",
         "🔗 Steadier connection" to "Fixed both watches picking different connections at once - the cause of random disconnects, stuck messages and false security alarms.",
         "📶 Signal bars fixed" to "Bars now match the distance: right next to each other shows full bars. Tap \"Make distance accurate\" once on the home screen.",
@@ -168,10 +181,6 @@ object WhatsNew {
         "📡 Range pushed to the limit" to "Bluetooth's most robust long-range mode takes over from a few metres apart on both watches, with smaller packets that survive weak signals, a 5-minute full-power search and more patient reconnects.",
         "🔇 Mute shows in calls" to "When you mute yourself in a call, your friend sees it.",
         "🎆 6 new message effects" to "Bubbles, Rainbow, Shooting stars, Disco, Thunder and Petals.",
-    )
-
-    @Suppress("unused")
-    val history = listOf(
         "✨ KK themes" to "8 new KK liquid glass themes: Nude, Champagne, Mocha, Cream, Black & Gold, Blush Nude, Sand and Diamond.",
         "🩹 Fixed: app closing after the PIN" to "Changing the app icon made Samsung close WristRadar. The icon now only changes a minute after you leave the app.",
         "🔑 A new key for every message" to "Each message is locked with its own key, destroyed right after use. Even a stolen key can't open a single older message.",

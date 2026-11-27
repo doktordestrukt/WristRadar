@@ -28,6 +28,11 @@ object F {
      * other watch drops its session on it too and both keep the SAME connection.
      */
     const val SESSION_DROP: Byte = 0x25
+    /**
+     * "Which contact am I?" (MK19), sent before HS_HELLO: nonce(16) | HMAC-SHA256(psk, "WR-WHO"|nonce)
+     * truncated to 16 bytes. Only a watch holding that pairing secret can tell who sent it.
+     */
+    const val HS_WHO: Byte = 0x26
     const val SECURE: Byte = 0x30
 }
 
@@ -93,6 +98,12 @@ object A {
     const val PQ_ID: Byte = 0x65
     /** In a call: call id + 1 = I muted my microphone, 0 = unmuted (MK18+). */
     const val CALL_MUTE: Byte = 0x66
+    /** MK19 group roster: groupId(16) | name | n | n x (key32 | name) | creatorKey32 | version long | Ed25519 sig. */
+    const val GROUP: Byte = 0x67
+    /** MK19 group message: groupId(16) | msgId uuid | originKey32 | sentAt long | text | Ed25519 sig by origin. */
+    const val GTEXT: Byte = 0x68
+    /** MK19 group call: op | callId(16) | data (see GroupCall). */
+    const val GCALL: Byte = 0x69
 }
 
 class Out {

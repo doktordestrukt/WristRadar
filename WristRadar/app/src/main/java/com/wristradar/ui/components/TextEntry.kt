@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Text
 import com.wristradar.ui.theme.LocalPalette
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** One text box at a time, shown above every screen. */
 object TextEntry {
@@ -68,6 +69,9 @@ fun TextEntryOverlay() {
         r.onClosed()
         if (send && text.isNotEmpty()) r.onText(text)
     }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var sending by remember(r) { mutableStateOf(false) }
+    fun sendSoon() { if (sending) return; sending = true; scope.launch { delay(120); close(true) } }
     BackHandler { close(false) }
     LaunchedEffect(r) {
         delay(30)                       // let the box attach first
@@ -89,7 +93,8 @@ fun TextEntryOverlay() {
                 textStyle = TextStyle(color = p.text, fontSize = 15.sp),
                 cursorBrush = SolidColor(p.primary),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { close(true) }, onDone = { close(true) }),
+                // The watch keyboard commits the last word just after it fires "send" - wait a beat for it.
+                keyboardActions = KeyboardActions(onSend = { sendSoon() }, onDone = { sendSoon() }),
                 maxLines = 4,
             )
             Spacer(Modifier.height(8.dp))

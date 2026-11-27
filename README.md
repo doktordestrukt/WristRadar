@@ -15,6 +15,7 @@
   <img alt="ML-KEM-1024" src="https://img.shields.io/badge/ML--KEM-1024-c2185b?style=flat-square">
   <img alt="ML-DSA-87" src="https://img.shields.io/badge/ML--DSA-87-c2185b?style=flat-square">
   <img alt="AES-256-GCM" src="https://img.shields.io/badge/AES-256--GCM-6a1b9a?style=flat-square">
+  <img alt="Groups" src="https://img.shields.io/badge/groups-chats%20%2B%20calls-ff4fb8?style=flat-square">
   <img alt="Tested on emulators" src="https://img.shields.io/badge/tested%20on-Wear%20OS%206%20emulators-ff9800?style=flat-square">
 </p>
 
@@ -71,6 +72,12 @@ Watch FE (no LTE needed). A Windows PC companion speaks the same protocol.
 - 14 full-screen **message effects** - confetti, fireworks, lasers, rainbow, thunder…
 - Keyboard opens on the first tap, right inside the app
 
+**👥 Groups (new in MK19)**
+- Pair with up to 6 watches, each friend gets their own chat
+- Group chats: every message signed by its author and passed between members, so friends you
+  aren't paired with still get it
+- Group calls: everyone in range joins with one tap, mute shown to everyone
+
 **📞 Calls**
 - Encrypted voice calls over Bluetooth, louder-call boost, mute shown to your friend
 
@@ -93,7 +100,7 @@ Watch FE (no LTE needed). A Windows PC companion speaks the same protocol.
 **🔐 Security**
 - App lock PIN, sealed in the watch's hardware Keystore
 - Emoji safety code, BLACKBOX intruder screen, local security log
-- Updates over Bluetooth or GitHub, signature-checked, chats kept
+- Auto-updates from GitHub every time you open the app (and every 2 h), or from a friend over Bluetooth. Signature-checked, chats kept
 
 </td>
   </tr>
@@ -118,6 +125,7 @@ threat model and the limits are in [`WristRadar/SECURITY.md`](WristRadar/SECURIT
 
 | Version | Highlights |
 |---|---|
+| **MK19 Constellation** | 👥 Group chats & group calls, up to 6 friends, signed group messages that hop between friends, auto-update from GitHub on every open |
 | **MK18.1 Horizon** | Range pushed to the limit: long-range mode from a few metres, smaller far packets, 5-min full-power search |
 | **MK18 Supernova** | No more freezing, steadier connection (no false alarms), first-tap keyboard, watch-only photos, signal bars fixed, 6 new effects |
 | MK17.1 Steady | Fixed the app closing after the PIN · KK themes |

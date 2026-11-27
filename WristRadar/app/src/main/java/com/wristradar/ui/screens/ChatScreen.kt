@@ -88,16 +88,34 @@ import kotlinx.coroutines.launch
 import java.util.Date
 
 @Composable
-fun ChatScreen(nav: NavHostController) {
+fun ChatScreen(nav: NavHostController, conv: String = "") {
     val g = WristRadarApp.graph
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
-    val messages by g.messages.messages.collectAsState(initial = null)
+    // MK19: "" = primary contact (every classic feature), "c:<id>" = another contact, "g:<id>" = a group.
+    val isPrimaryChat = conv.isEmpty()
+    val isGroup = conv.startsWith("g:")
+    val contactId = remember(conv) { g.engine.messenger.contactOfConv(conv) }
+    val groupsList by g.engine.groups.groups.collectAsState()
+    val group = if (isGroup) groupsList.firstOrNull { it.id == conv.substring(2) } else null
+    val peerMap by g.engine.peers.collectAsState()
+    val contactNames by g.trust.names.collectAsState()
+    val messages by remember(conv) { g.messages.messagesIn(conv) }.collectAsState(initial = null)
     // Only the bits the chat shows: signal/distance updates many times a second and must not
     // rebuild the message list each time.
-    val phase by remember { g.engine.connection.map { it.phase }.distinctUntilChanged() }.collectAsState(g.engine.connection.value.phase)
+    val primaryPhase by remember { g.engine.connection.map { it.phase }.distinctUntilChanged() }.collectAsState(g.engine.connection.value.phase)
+    val phase = when {
+        isPrimaryChat -> primaryPhase
+        isGroup -> if (group?.members?.any { peerMap[it.id]?.connected == true } == true) Phase.CONNECTED else Phase.SEARCHING
+        else -> if (peerMap[contactId]?.connected == true) Phase.CONNECTED else Phase.SEARCHING
+    }
     val remoteBattery by remember { g.engine.connection.map { it.remoteBattery }.distinctUntilChanged() }.collectAsState(g.engine.connection.value.remoteBattery)
-    val partnerName by g.profile.partnerName.collectAsState()
+    val primaryName by g.profile.partnerName.collectAsState()
+    val partnerName = when {
+        isPrimaryChat -> primaryName
+        isGroup -> group?.name ?: "Group"
+        else -> contactNames[contactId] ?: g.trust.contactName(contactId ?: "") ?: "Friend"
+    }
     val partnerAvatar by g.profile.partnerAvatar.collectAsState()
     val partner by g.trust.partner.collectAsState()
     val unit = g.settings.state.collectAsState().value.unit
@@ -108,26 +126,30 @@ fun ChatScreen(nav: NavHostController) {
     val presence by g.engine.presence.collectAsState()
     val lastSeen by g.trust.partnerLastSeen.collectAsState()
     val replyTarget = ChatReply.target
-    val partnerApp = g.engine.updater.state.collectAsState().value.partner
+    val partnerApp = g.engine.updater.state.collectAsState().value.partner.takeIf { isPrimaryChat }
+    val otherTyping = !isPrimaryChat && !isGroup && peerMap[contactId]?.typing == true
     val sendText = rememberTextInput(onClosed = { g.engine.messenger.sendTyping(false) }) { text ->
         val to = ChatReply.target?.id
         ChatReply.target = null
         val fx = ChatEffect.pending
         ChatEffect.pending = null
         scope.launch {
-            g.engine.messenger.sendText(text, to)
-            fx?.let { g.engine.extras.sendEffect(it) }
+            g.engine.messenger.sendText(text, to, conv)
+            if (isPrimaryChat) fx?.let { g.engine.extras.sendEffect(it) }
         }
     }
 
     DisposableEffect(Unit) {
         g.uiVisibility.chatVisible = true
+        g.uiVisibility.openConv = conv
         g.notifier.cancelMessages()
         onDispose {
             g.uiVisibility.chatVisible = false
             // Remember where the user was, so reopening the chat lands back there.
-            ChatScrollMemory.index = listState.centerItemIndex
-            ChatScrollMemory.offset = listState.centerItemScrollOffset
+            if (isPrimaryChat) {
+                ChatScrollMemory.index = listState.centerItemIndex
+                ChatScrollMemory.offset = listState.centerItemScrollOffset
+            }
         }
     }
 
@@ -143,12 +165,15 @@ fun ChatScreen(nav: NavHostController) {
             firstUnreadId = list.firstOrNull { !it.outgoing && !it.read && !it.isAlert }?.id
             unreadComputed = true
         }
-        if (list.any { !it.read }) g.engine.messenger.sendSeen(g.messages.markAllRead())
+        if (list.any { !it.read }) {
+            if (isPrimaryChat) g.engine.messenger.sendSeen(g.messages.markAllRead())
+            else g.engine.messenger.sendSeenIn(conv, g.messages.markReadIn(conv))
+        }
         val lastIndex = listState.layoutInfo.totalItemsCount - 1
         if (lastIndex <= 0) return@LaunchedEffect
         if (!restored) {
             restored = true
-            val saved = ChatScrollMemory.index
+            val saved = if (isPrimaryChat) ChatScrollMemory.index else -1
             if (saved in 0..lastIndex) { listState.scrollToItem(saved, ChatScrollMemory.offset); return@LaunchedEffect }
             listState.scrollToItem(lastIndex)
             return@LaunchedEffect
@@ -164,19 +189,25 @@ fun ChatScreen(nav: NavHostController) {
     WrScreen(state = listState) {
         item {
             Row(
-                Modifier.fillMaxWidth().clickable { nav.navigate("partner") },
+                Modifier.fillMaxWidth().clickable { if (isPrimaryChat) nav.navigate("partner") else if (isGroup) nav.navigate("groupinfo/${conv.substring(2)}") },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
                 val pEffect by g.profile.partnerEffect.collectAsState()
-                EffectAvatar(partnerAvatar, partnerName, 28.dp, pEffect)
+                if (isPrimaryChat) EffectAvatar(partnerAvatar, partnerName, 28.dp, pEffect)
+                else if (isGroup) Text("👥", fontSize = 22.sp)
+                else Avatar(null, partnerName, 28.dp)
                 Spacer(Modifier.width(6.dp))
                 Column {
                     Text(partnerName ?: "Partner", fontSize = 14.sp, color = p.text)
                     val mood by g.engine.extras.partnerMood.collectAsState()
-                    mood?.let { Text(it, fontSize = 9.sp, color = p.textDim, maxLines = 1) }
+                    if (isPrimaryChat) mood?.let { Text(it, fontSize = 9.sp, color = p.textDim, maxLines = 1) }
+                    if (isGroup && group != null) {
+                        val online = group.members.count { peerMap[it.id]?.connected == true }
+                        Text("${group.members.size} people · $online nearby", fontSize = 9.sp, color = p.textDim, maxLines = 1)
+                    }
                     val extra = listOfNotNull(
-                        remoteBattery?.takeIf { phase == Phase.CONNECTED }?.let { "🔋$it%" },
+                        remoteBattery?.takeIf { phase == Phase.CONNECTED && isPrimaryChat }?.let { "🔋$it%" },
                         if (g.settings.state.collectAsState().value.muted) "🔕" else null,
                     )
                     if (extra.isNotEmpty()) Text(extra.joinToString(" "), fontSize = 9.sp, color = p.textDim)
@@ -184,15 +215,19 @@ fun ChatScreen(nav: NavHostController) {
                         StatusDot(phase, 6.dp)
                         val streak = remember(list) { list?.let { streakDays(it) } ?: 0 }
                         if (streak > 0) Text("🔥$streak ", fontSize = 10.sp, color = p.warning)
-                        androidx.compose.animation.AnimatedContent(presence.partnerTyping, label = "typing") { typing ->
+                        androidx.compose.animation.AnimatedContent((isPrimaryChat && presence.partnerTyping) || otherTyping, label = "typing") { typing ->
                             if (typing) Text("typing…", fontSize = 10.sp, color = p.primary)
-                            else Text(presenceText(phase == Phase.CONNECTED, lastSeen), fontSize = 10.sp, color = phaseColor(phase))
+                            else Text(if (isPrimaryChat) presenceText(phase == Phase.CONNECTED, lastSeen) else if (phase == Phase.CONNECTED) "Online" else "Away",
+                                fontSize = 10.sp, color = phaseColor(phase))
                         }
                     }
                 }
                 Spacer(Modifier.width(6.dp))
-                Button(
-                    onClick = { if (g.engine.calls.startCall()) nav.navigate("call") },
+                if (isPrimaryChat || isGroup) Button(
+                    onClick = {
+                        if (isGroup) { if (g.engine.calls.group.start(conv.substring(2))) nav.navigate("groupcall") }
+                        else if (g.engine.calls.startCall()) nav.navigate("call")
+                    },
                     enabled = phase == Phase.CONNECTED,
                     modifier = Modifier.size(30.dp),
                     colors = ButtonDefaults.buttonColors(backgroundColor = p.connection.copy(alpha = 0.85f), contentColor = p.background),
@@ -240,13 +275,14 @@ fun ChatScreen(nav: NavHostController) {
                     onRetry = { scope.launch { g.engine.messenger.retry(m.id) } },
                     quoted = m.replyTo?.let { byId[it] },
                     lastOut = m.id == lastOutId,
+                    senderName = if (isGroup && !m.outgoing) m.sender?.let { group?.nameOf(it) } else null,
                     onLongPress = { nav.navigate("msg/${m.id}") },
                     onReactTap = { e -> scope.launch { g.engine.messenger.react(m.id, e) } },
                     onDoubleTap = { if (!m.isAlert && !m.isInfo) scope.launch { g.engine.messenger.react(m.id, "❤️") } },
                 )
             }
         }
-        if (presence.partnerTyping) item(key = "typing") {
+        if ((isPrimaryChat && presence.partnerTyping) || otherTyping) item(key = "typing") {
             Row(Modifier.fillMaxWidth()) {
                 Box(Modifier.clip(RoundedCornerShape(14.dp)).background(p.incoming).padding(horizontal = 12.dp, vertical = 10.dp)) { TypingDots(p.text) }
             }
@@ -280,13 +316,13 @@ fun ChatScreen(nav: NavHostController) {
                         modifier = Modifier.size(ButtonDefaults.DefaultButtonSize),
                         colors = ButtonDefaults.primaryButtonColors(backgroundColor = p.primary, contentColor = p.onColor(p.primary)),
                     ) { Icon(painterResource(R.drawable.ic_keyboard), contentDescription = "Type a message") }
-                    Button(
+                    if (isPrimaryChat) Button(
                         onClick = { nav.navigate("picker/chat") },
                         enabled = partner != null,
                         modifier = Modifier.size(ButtonDefaults.DefaultButtonSize),
                         colors = ButtonDefaults.secondaryButtonColors(backgroundColor = p.surface, contentColor = p.primary),
                     ) { Icon(painterResource(R.drawable.ic_image), contentDescription = "Send a picture") }
-                    Button(
+                    if (isPrimaryChat) Button(
                         onClick = { nav.navigate("voicenote/note") },
                         enabled = partner != null,
                         modifier = Modifier.size(ButtonDefaults.DefaultButtonSize),
@@ -297,7 +333,7 @@ fun ChatScreen(nav: NavHostController) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     g.settings.state.collectAsState().value.quickReplies.take(3).forEach { q ->
                         CompactChip(
-                            onClick = { scope.launch { g.engine.messenger.sendText(q) } },
+                            onClick = { scope.launch { g.engine.messenger.sendText(q, conv = conv) } },
                             enabled = partner != null,
                             label = { Text(q, fontSize = 11.sp) },
                             colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text),
@@ -310,6 +346,11 @@ fun ChatScreen(nav: NavHostController) {
                         colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
                     CompactChip(onClick = { nav.navigate("search") }, label = { Text("🔍 Search", fontSize = 11.sp) },
                         colors = ChipDefaults.chipColors(backgroundColor = p.surface, contentColor = p.text))
+                }
+                if (!isPrimaryChat) {
+                    Text(if (isGroup) "Group chats are end-to-end encrypted between every member's watch." else "End-to-end encrypted",
+                        fontSize = 9.sp, color = p.textDim, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+                    return@Column
                 }
                 Spacer(Modifier.height(4.dp))
                 CompactChip(onClick = { nav.navigate("sendeffect") }, enabled = partner != null,
@@ -404,6 +445,7 @@ fun missingFeatures(partnerVersion: Int): String {
     if (partnerVersion < 16) f += listOf("message effects")
     if (partnerVersion < 18) f += listOf("top-secret grade encryption")
     if (partnerVersion < 19) f += listOf("a new key for every message")
+    if (partnerVersion < 23) f += listOf("group chats", "group calls", "more than one friend")
     return f.joinToString(", ")
 }
 
@@ -422,6 +464,7 @@ private fun MessageBubble(
     quoted: ChatMessage? = null, onLongPress: () -> Unit = {}, onReactTap: (String) -> Unit = {},
     onDoubleTap: () -> Unit = {},
     lastOut: Boolean = false,
+    senderName: String? = null,
 ) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
@@ -462,6 +505,7 @@ private fun MessageBubble(
         },
         horizontalAlignment = if (m.outgoing) Alignment.End else Alignment.Start,
     ) {
+        if (senderName != null) Text(senderName, fontSize = 9.sp, color = p.primary, modifier = Modifier.padding(start = 6.dp, bottom = 1.dp))
         val glassOn = com.wristradar.ui.theme.LocalGlass.current.on
         val hasSpoiler = !m.isImage && com.wristradar.ui.components.RichText.hasSpoiler(m.text)
         var reveal by remember(m.id) { mutableStateOf(false) }

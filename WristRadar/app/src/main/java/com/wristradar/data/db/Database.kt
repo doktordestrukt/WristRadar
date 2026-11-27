@@ -56,12 +56,43 @@ data class MessageEntity(
     @ColumnInfo(defaultValue = "0") val pinned: Boolean = false,
     /** Secret flags: 1 = vanish after reading, 2 = hold to reveal. */
     @ColumnInfo(defaultValue = "0") val secret: Int = 0,
+    /** MK19 conversation: "" = primary contact, "c:<contactId>" = other contacts, "g:<groupId>" = groups. */
+    @ColumnInfo(defaultValue = "") val conv: String = "",
+    /** Groups: who wrote it (contact id hex), for showing their name. */
+    val sender: String? = null,
 )
 
 @Dao
 interface MessageDao {
-    @Query("SELECT * FROM messages ORDER BY localTime ASC, senderSeq ASC")
+    @Query("SELECT * FROM messages WHERE conv = '' ORDER BY localTime ASC, senderSeq ASC")
     fun observeAll(): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE conv = :conv ORDER BY localTime ASC, senderSeq ASC")
+    fun observeConv(conv: String): Flow<List<MessageEntity>>
+
+    @Query("SELECT COUNT(*) FROM messages WHERE conv = :conv AND outgoing = 0 AND read = 0")
+    fun observeUnreadConv(conv: String): Flow<Int>
+
+    @Query("SELECT id FROM messages WHERE conv = :conv AND outgoing = 0 AND read = 0 AND kind < 3")
+    suspend fun unreadIncomingIdsConv(conv: String): List<String>
+
+    @Query("UPDATE messages SET read = 1 WHERE conv = :conv AND read = 0")
+    suspend fun markReadConv(conv: String)
+
+    @Query("SELECT * FROM messages WHERE conv = :conv AND outgoing = 1 AND status IN (0, 3) ORDER BY localTime ASC")
+    suspend fun unacknowledgedConv(conv: String): List<MessageEntity>
+
+    @Query("DELETE FROM messages WHERE conv = :conv")
+    suspend fun deleteConv(conv: String)
+
+    @Query("UPDATE messages SET conv = :to WHERE conv = :from")
+    suspend fun renameConv(from: String, to: String)
+
+    @Query("SELECT * FROM messages WHERE conv = :conv ORDER BY localTime DESC LIMIT :n")
+    suspend fun recentConv(conv: String, n: Int): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE conv = :conv ORDER BY localTime DESC LIMIT 1")
+    fun observeLastConv(conv: String): Flow<MessageEntity?>
 
     @Query("SELECT COUNT(*) FROM messages WHERE outgoing = 0 AND read = 0")
     fun observeUnread(): Flow<Int>
@@ -84,22 +115,22 @@ interface MessageDao {
     @Query("UPDATE messages SET progress = :progress, status = :status WHERE id = :id")
     suspend fun setProgress(id: String, progress: Int, status: Int)
 
-    @Query("SELECT * FROM messages WHERE outgoing = 1 AND status IN (0, 3) ORDER BY localTime ASC")
+    @Query("SELECT * FROM messages WHERE conv = '' AND outgoing = 1 AND status IN (0, 3) ORDER BY localTime ASC")
     suspend fun unacknowledgedOutgoing(): List<MessageEntity>
 
     @Query("SELECT * FROM messages WHERE outgoing = 0 AND read = 0 ORDER BY localTime DESC LIMIT 5")
     suspend fun latestUnread(): List<MessageEntity>
 
-    @Query("SELECT id FROM messages WHERE outgoing = 0 AND read = 0 AND kind < 3")
+    @Query("SELECT id FROM messages WHERE conv = '' AND outgoing = 0 AND read = 0 AND kind < 3")
     suspend fun unreadIncomingIds(): List<String>
 
-    @Query("SELECT id FROM messages WHERE outgoing = 0 AND read = 1 AND kind < 3 ORDER BY localTime DESC LIMIT 50")
+    @Query("SELECT id FROM messages WHERE conv = '' AND outgoing = 0 AND read = 1 AND kind < 3 ORDER BY localTime DESC LIMIT 50")
     suspend fun recentReadIncomingIds(): List<String>
 
     @Query("UPDATE messages SET status = 5 WHERE outgoing = 1 AND id IN (:ids) AND status IN (0, 1)")
     suspend fun markSeen(ids: List<String>)
 
-    @Query("UPDATE messages SET read = 1 WHERE read = 0")
+    @Query("UPDATE messages SET read = 1 WHERE conv = '' AND read = 0")
     suspend fun markAllRead()
 
     @Query("DELETE FROM messages")
@@ -154,7 +185,7 @@ interface SecurityEventDao {
     suspend fun clear()
 }
 
-@Database(entities = [MessageEntity::class, SecurityEventEntity::class], version = 5, exportSchema = true)
+@Database(entities = [MessageEntity::class, SecurityEventEntity::class], version = 6, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun messages(): MessageDao
     abstract fun securityEvents(): SecurityEventDao
@@ -162,8 +193,16 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "wristradar.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
+
+        /** MK19: conversations (contacts and groups). Adds columns only - every chat is kept. */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN conv TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE messages ADD COLUMN sender TEXT")
+            }
+        }
 
         /** V4: secret / vanishing messages. Adds a column only - chats are kept. */
         private val MIGRATION_4_5 = object : Migration(4, 5) {

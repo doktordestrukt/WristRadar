@@ -39,6 +39,9 @@ data class ChatMessage(
     /** Neutral system note (nudges, "update to see this"). */
     val isInfo: Boolean = false,
     val secret: Int = 0,
+    val conv: String = "",
+    /** Groups: contact id of the author. */
+    val sender: String? = null,
 )
 
 class MessageRepository(
@@ -86,6 +89,18 @@ class MessageRepository(
 
     /** Decrypting happens on a background thread, never on the one that draws the screen. */
     val messages: Flow<List<ChatMessage>> = dao.observeAll().map { list -> list.map { it.toChat() } }.flowOn(Dispatchers.Default)
+
+    // ---- MK19 conversations ("" = primary contact, "c:<id>" = other contacts, "g:<id>" = groups)
+    fun messagesIn(conv: String): Flow<List<ChatMessage>> =
+        if (conv.isEmpty()) messages else dao.observeConv(conv).map { list -> list.map { it.toChat() } }.flowOn(Dispatchers.Default)
+    fun unreadIn(conv: String): Flow<Int> = if (conv.isEmpty()) unread else dao.observeUnreadConv(conv)
+    fun lastIn(conv: String): Flow<ChatMessage?> = dao.observeLastConv(conv).map { it?.toChat() }.flowOn(Dispatchers.Default)
+    suspend fun markReadIn(conv: String): List<String> =
+        if (conv.isEmpty()) markAllRead() else { val ids = dao.unreadIncomingIdsConv(conv); dao.markReadConv(conv); ids }
+    suspend fun unacknowledgedIn(conv: String) = if (conv.isEmpty()) dao.unacknowledgedOutgoing() else dao.unacknowledgedConv(conv)
+    suspend fun recentIn(conv: String, n: Int) = dao.recentConv(conv, n)
+    suspend fun clearConversation(conv: String) = withContext(Dispatchers.IO) { dao.deleteConv(conv) }
+    suspend fun renameConversation(from: String, to: String) = withContext(Dispatchers.IO) { dao.renameConv(from, to) }
     val unread: Flow<Int> = dao.observeUnread()
 
     private fun MessageEntity.toChat() = ChatMessage(
@@ -93,7 +108,7 @@ class MessageRepository(
         bodyEnc?.let { decryptBody(id, it) } ?: "",
         sentAt, localTime, status, progress, width, height, read,
         kind == MsgKind.AUDIO, kind == MsgKind.ALERT, durationMs,
-        reactMine, reactTheirs, replyTo, edited, pinned, kind == MsgKind.INFO, secret,
+        reactMine, reactTheirs, replyTo, edited, pinned, kind == MsgKind.INFO, secret, conv, sender,
     )
 
     fun encryptBody(id: String, text: String): ByteArray {

@@ -43,8 +43,8 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
     /** Outgoing: the local user pressed PAIR on a nearby watch. */
     fun start(discoveryId: Int, device: BluetoothDevice, name: String) {
         if (_state.value.active) return
-        if (g.trust.partner.value != null) {
-            _state.value = PairingState.Failed("Unpair your current partner first (Settings → Unpair)."); return
+        if (g.trust.contacts.value.size >= MAX_CONTACTS) {
+            _state.value = PairingState.Failed("You can pair up to $MAX_CONTACTS watches. Remove one first (Settings › Contacts)."); return
         }
         reset()
         targetDiscoveryId = discoveryId
@@ -147,7 +147,7 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         val cap = if (r.hasMore()) r.b().toInt() else 0
         fun reject(why: String) = engine.scope.launch { l.send(frame(F.PAIR_ABORT, Out().str(why).build())); delay(300); l.close() }
 
-        if (g.trust.partner.value != null) { reject("already paired"); return }
+        if (g.trust.contacts.value.size >= MAX_CONTACTS) { reject("contact list full"); return }
         if (!engine.discoveryActive) { reject("not on pairing screen"); return }
 
         val s = _state.value
@@ -224,15 +224,17 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
         val c = crypto ?: return
         val l = link ?: return
         val peerId = c.peerId ?: return
-        g.trust.save(peerId, c.derivePsk())
+        val firstContact = g.trust.partner.value == null || g.trust.partner.value?.identityKey?.contentEquals(peerId) == true
+        g.trust.addContact(peerId, c.derivePsk())
+        val contactId = peerId.joinToString("") { "%02x".format(it) }
         // Pairing V3 already proved the friend's ML-DSA-87 key - store it straight away.
-        c.peerPq?.takeIf { c.v3 }?.let { g.trust.savePartnerPq(it) }
-        g.profile.setPartner(peerName, null)
+        c.peerPq?.takeIf { c.v3 }?.let { g.trust.saveContactPq(contactId, it) }
+        if (firstContact) g.profile.setPartner(peerName, null) else g.trust.setContactName(contactId, peerName)
         c.wipe()
         timeoutJob?.cancel()
         _state.value = PairingState.Success(peerName)
         crypto = null; link = null; pendingCommit = null
-        engine.onPaired(l)
+        engine.onPaired(l, contactId, peerName)
     }
 
     fun onLinkClosed(l: Link) {
@@ -278,6 +280,8 @@ class PairingController(private val g: AppGraph, private val engine: RadarEngine
 
     companion object {
         const val PAIRING_TIMEOUT_MS = 120_000L
+        /** Most watches one watch can pair with (each needs its own Bluetooth link). */
+        const val MAX_CONTACTS = 6
         /** Capability byte appended to PAIR_COMMIT: "I can pair with V3". */
         const val PAIR_V3_CAP = 3
     }

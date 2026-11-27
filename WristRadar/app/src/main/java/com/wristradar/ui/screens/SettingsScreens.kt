@@ -160,6 +160,7 @@ fun SettingsScreen(nav: NavHostController) {
             WrChip("Refresh connection", { g.engine.refresh() }, icon = { Icon(Icons.Filled.Refresh, null) })
         }
         item { WrChip("My profile", { nav.navigate("profile") }, icon = { Icon(Icons.Filled.Person, null) }) }
+        item { WrChip("Contacts", { nav.navigate("contacts") }, secondary = "Everyone you're paired with", icon = { Icon(Icons.Filled.Person, null) }) }
         if (partner != null) item {
             WrChip("Unpair device", { confirmUnpair = true }, secondary = partnerName, danger = true, icon = { Icon(Icons.Filled.Delete, null) })
         }

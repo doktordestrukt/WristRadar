@@ -105,10 +105,26 @@ class CallManager(private val ctx: Context, private val g: AppGraph, private val
         callId?.let { send(A.CALL_MUTE, Out().raw(it).b(if (muted) 1 else 0).build()) }
     }
 
+    /** Group-call signalling from non-primary contacts (filled in by the group-call step). */
+    private fun groupSignal(type: Byte, p: ByteArray, fromContact: String) {
+        group.onSignal(type, p, fromContact)
+    }
+
+    /** Group calls (MK19). */
+    val group = GroupCall(ctx, g, engine)
+
     fun dismissResult() { if (!_state.value.live) _state.value = CallState.Idle }
 
     // ------------------------------------------------------------ signalling from partner
-    fun onSignal(type: Byte, p: ByteArray) {
+    /** A contact's link went down (calls are with the primary contact for now). */
+    fun onPeerLinkLost(contactId: String) {
+        group.onPeerLinkLost(contactId)
+        if (g.trust.isPrimary(contactId)) onLinkLost()
+    }
+
+    fun onSignal(type: Byte, p: ByteArray, fromContact: String? = null) {
+        // Calls with other contacts arrive with MK19 group calls; ignore them on this path.
+        if (fromContact != null && !g.trust.isPrimary(fromContact)) { groupSignal(type, p, fromContact); return }
         val r = In(p)
         val id = r.raw(16)
         when (type) {

@@ -165,6 +165,9 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
         }
     }
 
+    /** Tells a (non-primary) contact which version this watch runs. */
+    suspend fun sendVersionTo(s: SecureSession) = sendVersion(s)
+
     private suspend fun sendVersion(s: SecureSession) {
         runCatching { s.send(A.VERSION, Out().i(myCode).str(BuildConfig.RELEASE_LABEL).b(PLATFORM_WATCH).build()) }
     }
@@ -183,7 +186,7 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
                 val code = r.i(); val label = r.str(20); val platform = if (r.hasMore()) r.b() else PLATFORM_WATCH
                 gotVersion = true
                 if (platform == PLATFORM_WATCH) notePartnerVersion(code)
-                engine.onPartnerVersion(code)
+                engine.onPeerVersion(s, code)
                 _state.update { it.copy(partner = PartnerApp(code, label.ifBlank { "V$code" }, platform == PLATFORM_WATCH)) }
                 // Answer once per session, so the friend learns our version even if our first one was lost.
                 if (!versionReplied) { versionReplied = true; sendVersion(s) }
@@ -303,14 +306,22 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
 
     fun checkNow() { engine.scope.launch { checkGithub(manual = true) } }
 
+    /** The app came to the screen: look for a newer release (at most every 15 min) and install a waiting one. */
+    fun onAppOpened() {
+        val s = g.settings.current
+        if (readyFile.exists() && s.autoInstallUpdates) { installWhenIdle(); return }
+        if (s.githubUpdates && System.currentTimeMillis() - s.lastGithubCheck > OPEN_CHECK_MS) engine.scope.launch { checkGithub(manual = false) }
+    }
+
     private suspend fun checkGithub(manual: Boolean) {
         if (_state.value.githubBusy) return
         _state.update { it.copy(githubBusy = true, github = "Looking for Wi-Fi…") }
         try {
             val req = wifiNetwork()
             wifiRelease = req?.second
-            val net = req?.first
-            if (net == null) { _state.update { it.copy(github = "No Wi-Fi - will try again later") }; return }
+            // No Wi-Fi nearby: use whatever connection the watch has (usually through the phone).
+            val net = req?.first ?: ctx.getSystemService(ConnectivityManager::class.java)?.activeNetwork
+            if (net == null) { _state.update { it.copy(github = "No internet - will try again later") }; return }
             _state.update { it.copy(github = "Checking GitHub…") }
             val release = withContext(Dispatchers.IO) { latestRelease(net) }
             g.settings.update { it.copy(lastGithubCheck = System.currentTimeMillis()) }
@@ -348,7 +359,9 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
                 val a = assets.getJSONObject(i)
                 if (a.optString("name").endsWith(".apk", ignoreCase = true) && a.optLong("size") in 1..MAX_APK.toLong()) {
                     val url = a.optString("browser_download_url")
-                    if (url.startsWith("https://github.com/$GITHUB_REPO/")) return Release(code, "V$code", url)
+                    val name = Regex("(?i)mk[0-9.]+(-[a-z]+)*").find(tag)?.value?.split('-')
+                        ?.joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }?.replaceFirst("Mk", "MK")
+                    if (url.startsWith("https://github.com/$GITHUB_REPO/")) return Release(code, name ?: "V$code", url)
                 }
             }
             return null
@@ -440,7 +453,7 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
     private fun installWhenIdle() {
         engine.scope.launch {
             // Never interrupt a call or a picture transfer.
-            while (engine.calls.state.value.live || engine.messenger.busy) delay(5_000)
+            while (engine.calls.state.value.live || engine.calls.group.state.value?.phase == com.wristradar.audio.GroupCall.Phase.ACTIVE || engine.messenger.busy) delay(5_000)
             install()
         }
     }
@@ -515,7 +528,8 @@ class Updater(private val ctx: Context, private val g: AppGraph, private val eng
     companion object {
         private const val TAG = "WristRadar"
         const val GITHUB_REPO = "doktordestrukt/WristRadar"
-        const val GITHUB_EVERY_MS = 6 * 60 * 60_000L
+        const val GITHUB_EVERY_MS = 2 * 60 * 60_000L
+        const val OPEN_CHECK_MS = 15 * 60_000L
         const val MAX_APK = 64 * 1024 * 1024
         const val CHUNK = 3000
         const val WINDOW = 6

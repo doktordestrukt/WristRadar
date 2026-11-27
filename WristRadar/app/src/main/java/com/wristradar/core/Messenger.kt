@@ -28,7 +28,31 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
     @Volatile private var imageJobActive = false
     val busy: Boolean get() = imageJobActive
 
+    // ---------------------------------------------------------------- MK19 conversations
+
+    /** "" for the primary contact (all chats from before MK19), "c:<id>" for other contacts. */
+    fun convOf(contactId: String): String = if (g.trust.isPrimary(contactId)) "" else "c:$contactId"
+
+    /** The contact a 1:1 conversation is with (null for groups). */
+    fun contactOfConv(conv: String): String? = when {
+        conv.isEmpty() -> g.trust.partner.value?.id
+        conv.startsWith("c:") -> conv.substring(2)
+        else -> null
+    }
+
+    private fun sessionForConv(conv: String): SecureSession? = contactOfConv(conv)?.let { engine.sessionFor(it) }
+
+    /** Message types a non-primary contact may send (games, updates etc. stay with the primary). */
+    private val contactTypes = setOf(
+        A.TEXT, A.ACK, A.PROFILE, A.STATUS, A.SEEN, A.REACT, A.EDIT, A.DELETE, A.PIN, A.VERSION,
+        A.PQ_ID, A.TYPING, A.UNPAIR, A.NUDGE, A.EFFECT, A.GROUP, A.GTEXT, A.GCALL,
+        A.CALL_INVITE, A.CALL_ACCEPT, A.CALL_DECLINE, A.CALL_END, A.CALL_AUDIO, A.CALL_MUTE,
+    )
+
     suspend fun handle(session: SecureSession, type: Byte, p: ByteArray) {
+        val peer = engine.peerOf(session)
+        val primary = peer?.primary ?: true
+        if (!primary) { handleContact(session, peer!!, type, p); return }
         when (type) {
             A.TEXT -> onText(session, p)
             A.ACK -> {
@@ -60,13 +84,13 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
                 val battery = r.b().toInt()
                 val rssi = r.i()
                 if (r.hasMore()) engine.onPartnerPhone((r.b().toInt() and 1) == 1)
-                engine.onRemoteStatus(if (battery in 0..100) battery else null, if (rssi in -127..0) rssi else null)
+                engine.onRemoteStatus(session, if (battery in 0..100) battery else null, if (rssi in -127..0) rssi else null)
             }
             A.IMG_START -> images.onStart(session, p)
             A.IMG_CHUNK -> images.onChunk(session, p)
             A.IMG_STATUS -> images.onStatus(p)
             A.IMG_FAIL -> images.onFail(p)
-            A.UNPAIR -> engine.onRemoteUnpair()
+            A.UNPAIR -> engine.onRemoteUnpair(session)
             A.SEEN -> {
                 val r = In(p)
                 val n = r.i().coerceIn(0, 200)
@@ -96,13 +120,15 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
             A.OPENED -> Unit   // secret messages removed in V5
             A.BLAST, A.GAME, A.TAPS, A.TODO, A.MOOD, A.EFFECT -> engine.extras.handle(type, p)
             A.SOS -> Unit   // SOS removed in V6
-            A.PQ_ID -> engine.onPartnerPqIdentity(p)
+            A.PQ_ID -> engine.onPeerPqIdentity(session, p)
+            A.GROUP, A.GTEXT -> engine.groups.handle(session, type, p)
+            A.GCALL -> engine.calls.group.onPacket(p, engine.peerOf(session)?.id ?: return)
             A.NUDGE -> {
                 g.notifier.nudge()
                 insertInfo("👋 ${g.profile.partnerName.value ?: "Your friend"} nudged you")
                 if (!g.uiVisibility.chatVisible) g.notifier.showInfo(g.profile.partnerName.value ?: "Your friend", "👋 Nudge!")
             }
-            A.TYPING -> engine.onPartnerTyping(In(p).b().toInt() == 1)
+            A.TYPING -> engine.onPeerTyping(session, In(p).b().toInt() == 1)
             A.CALL_INVITE, A.CALL_ACCEPT, A.CALL_DECLINE, A.CALL_END, A.CALL_AUDIO, A.CALL_MUTE -> engine.calls.onSignal(type, p)
             A.SECURITY_NOTICE -> {
                 val what = In(p).str(300)
@@ -120,14 +146,54 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     private val unknownSeen = java.util.Collections.synchronizedSet(HashSet<Byte>())
 
+    /** Everything a non-primary contact can send. */
+    private suspend fun handleContact(session: SecureSession, peer: RadarEngine.PeerLink, type: Byte, p: ByteArray) {
+        if (type !in contactTypes) return
+        when (type) {
+            A.TEXT -> onText(session, p)
+            A.ACK -> {
+                val id = In(p).uuid().toString()
+                val e = g.messages.get(id)
+                if (e != null && e.outgoing && e.status != MsgStatus.DELIVERED && e.status != MsgStatus.SEEN) g.messages.setProgress(id, 100, MsgStatus.DELIVERED)
+                lastAttempt.remove(id)
+            }
+            A.PROFILE -> {
+                val name = com.wristradar.data.ProfileStore.sanitizeName(In(p).str(200))
+                name?.takeIf { it.isNotBlank() }?.let { g.trust.setContactName(peer.id, it) }
+            }
+            A.STATUS -> {
+                val r = In(p); val battery = r.b().toInt(); val rssi = r.i()
+                engine.onRemoteStatus(session, if (battery in 0..100) battery else null, if (rssi in -127..0) rssi else null)
+            }
+            A.SEEN -> { val r = In(p); val n = r.i().coerceIn(0, 200); g.messages.markSeen(List(n) { r.uuid().toString() }) }
+            A.REACT -> { val r = In(p); val id = r.uuid().toString(); val emoji = r.str(32).take(8); if (g.messages.get(id) != null) g.messages.setReactTheirs(id, emoji.ifEmpty { null }) }
+            A.EDIT -> {
+                val r = In(p); val id = r.uuid().toString(); val text = r.str(4000).take(MAX_TEXT)
+                val e = g.messages.get(id)
+                if (e != null && !e.outgoing && e.kind == MsgKind.TEXT && e.conv == convOf(peer.id) && text.isNotBlank()) g.messages.setText(id, text)
+            }
+            A.DELETE -> { val id = In(p).uuid().toString(); val e = g.messages.get(id); if (e != null && !e.outgoing && e.conv == convOf(peer.id)) g.messages.delete(id) }
+            A.PIN -> { val r = In(p); val id = r.uuid().toString(); val on = r.b().toInt() == 1; if (g.messages.get(id) != null) g.messages.setPinned(id, on) }
+            A.VERSION -> runCatching { engine.onPeerVersion(session, In(p).i()) }
+            A.PQ_ID -> engine.onPeerPqIdentity(session, p)
+            A.TYPING -> engine.onPeerTyping(session, In(p).b().toInt() == 1)
+            A.UNPAIR -> engine.onRemoteUnpair(session)
+            A.NUDGE -> { g.notifier.nudge(); insertInfo("👋 ${peer.name} nudged you", convOf(peer.id)) }
+            A.EFFECT -> engine.extras.handle(type, p)
+            A.GROUP, A.GTEXT -> engine.groups.handle(session, type, p)
+            A.GCALL -> engine.calls.group.onPacket(p, peer.id)
+            else -> engine.calls.onSignal(type, p, peer.id)
+        }
+    }
+
     /** Neutral note in the chat (not an alert). */
-    suspend fun insertInfo(text: String) {
+    suspend fun insertInfo(text: String, conv: String = "") {
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         g.messages.upsert(
             MessageEntity(
                 id = id, outgoing = false, kind = MsgKind.INFO, bodyEnc = g.messages.encryptBody(id, text),
-                senderSeq = 0, sentAt = now, localTime = now, status = MsgStatus.RECEIVED, read = true,
+                senderSeq = 0, sentAt = now, localTime = now, status = MsgStatus.RECEIVED, read = true, conv = conv,
             )
         )
     }
@@ -153,45 +219,50 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         if (secret && r.hasMore()) r.b()   // secret messages were removed: show as normal text
         val replyTo = if (!secret && r.hasMore()) runCatching { r.uuid().toString() }.getOrNull() else null
         val sid = id.toString()
+        val peer = engine.peerOf(session)
+        val conv = peer?.let { convOf(it.id) } ?: ""
         val entity = MessageEntity(
             id = sid, outgoing = false, kind = MsgKind.TEXT,
             bodyEnc = g.messages.encryptBody(sid, text), senderSeq = seq, sentAt = sentAt,
             localTime = System.currentTimeMillis(), status = MsgStatus.RECEIVED,
-            read = g.uiVisibility.chatVisible, replyTo = replyTo,
+            read = g.uiVisibility.chatVisible && g.uiVisibility.openConv == conv, replyTo = replyTo, conv = conv,
         )
         val isNew = g.messages.insertIgnore(entity)
         session.send(A.ACK, Out().uuid(id).build())          // ACK duplicates too
-        if (isNew) onIncoming(entity, text)
+        if (isNew) onIncoming(entity, text, peer?.name)
     }
 
-    private suspend fun onIncoming(e: MessageEntity, rawPreview: String) {
+    suspend fun onIncoming(e: MessageEntity, rawPreview: String, fromName: String? = null) {
         val preview = com.wristradar.ui.components.RichText.plain(rawPreview)
         com.wristradar.glance.Glance.refresh(engine.ctx)
-        if (g.uiVisibility.chatVisible) {
-            sendSeen(g.messages.markAllRead())
+        val title = fromName ?: g.profile.partnerName.value ?: "Partner"
+        if (g.uiVisibility.chatVisible && g.uiVisibility.openConv == e.conv) {
+            if (e.conv.isEmpty()) sendSeen(g.messages.markAllRead())
+            else { val ids = g.messages.markReadIn(e.conv); sendSeenIn(e.conv, ids) }
             g.notifier.tick()
         } else {
             val showText = g.settings.current.previews && !g.lock.locked.value
-            if (g.uiVisibility.appVisible) com.wristradar.ui.components.BannerBus.show(g.profile.partnerName.value ?: "Partner", if (showText) preview else "New message")
-            g.notifier.showMessage(g.profile.partnerName.value ?: "Partner", preview, g.messages.unreadCount())
+            if (g.uiVisibility.appVisible) com.wristradar.ui.components.BannerBus.show(title, if (showText) preview else "New message")
+            g.notifier.showMessage(title, preview, g.messages.unreadCount())
         }
     }
 
     // ---------- sending ----------
 
-    suspend fun sendText(raw: String, replyTo: String? = null): Boolean {
+    suspend fun sendText(raw: String, replyTo: String? = null, conv: String = ""): Boolean {
         engine.lastActivity = System.currentTimeMillis()
         val text = raw.trim().take(MAX_TEXT)
         if (text.isEmpty() || g.trust.partner.value == null) return false
+        if (conv.startsWith("g:")) return engine.groups.sendText(conv.substring(2), text)
         val id = UUID.randomUUID()
         val now = System.currentTimeMillis()
         val e = MessageEntity(
             id = id.toString(), outgoing = true, kind = MsgKind.TEXT,
             bodyEnc = g.messages.encryptBody(id.toString(), text), senderSeq = g.trust.nextSequence(),
-            sentAt = now, localTime = now, status = MsgStatus.PENDING, replyTo = replyTo,
+            sentAt = now, localTime = now, status = MsgStatus.PENDING, replyTo = replyTo, conv = conv,
         )
         g.messages.upsert(e)
-        engine.currentSession()?.let { transmitText(it, e, text) }
+        (if (conv.isEmpty()) engine.currentSession() else sessionForConv(conv))?.let { transmitText(it, e, text) }
         return true
     }
 
@@ -253,6 +324,23 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
 
     private val pendingActions = java.util.concurrent.ConcurrentLinkedQueue<Pair<Byte, ByteArray>>()
 
+    /** Routes an action about a message to the contact of that message's conversation. */
+    private suspend fun sendActionFor(msgId: String, type: Byte, payload: ByteArray) {
+        val conv = g.messages.get(msgId)?.conv ?: ""
+        if (conv.startsWith("g:")) return            // groups: reactions/edits stay local for now
+        if (conv.isEmpty()) { sendAction(type, payload); return }
+        sessionForConv(conv)?.let { s -> engine.scope.launch { s.send(type, payload) } }
+    }
+
+    /** Seen receipts for a non-primary contact's chat. */
+    fun sendSeenIn(conv: String, ids: List<String>) {
+        if (ids.isEmpty() || conv.startsWith("g:")) return
+        val s = (if (conv.isEmpty()) engine.currentSession() else sessionForConv(conv)) ?: return
+        val out = Out().i(ids.size)
+        ids.take(200).forEach { out.uuid(UUID.fromString(it)) }
+        engine.scope.launch { s.send(A.SEEN, out.build()) }
+    }
+
     private fun sendAction(type: Byte, payload: ByteArray) {
         val s = engine.currentSession()
         if (s == null) { pendingActions.add(type to payload); return }
@@ -263,7 +351,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         val e = g.messages.get(id) ?: return
         val new = if (e.reactMine == emoji) null else emoji
         g.messages.setReactMine(id, new)
-        sendAction(A.REACT, Out().uuid(UUID.fromString(id)).str(new ?: "").build())
+        sendActionFor(id, A.REACT, Out().uuid(UUID.fromString(id)).str(new ?: "").build())
     }
 
     suspend fun edit(id: String, raw: String) {
@@ -271,20 +359,20 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         val text = raw.trim().take(MAX_TEXT)
         if (!e.outgoing || e.kind != MsgKind.TEXT || text.isEmpty()) return
         g.messages.setText(id, text)
-        sendAction(A.EDIT, Out().uuid(UUID.fromString(id)).str(text).build())
+        sendActionFor(id, A.EDIT, Out().uuid(UUID.fromString(id)).str(text).build())
     }
 
     /** Deletes a message here; my own messages are deleted on both watches. */
     suspend fun deleteForBoth(id: String) {
         val e = g.messages.get(id) ?: return
+        if (e.outgoing) sendActionFor(id, A.DELETE, Out().uuid(UUID.fromString(id)).build())
         g.messages.delete(id)
-        if (e.outgoing) sendAction(A.DELETE, Out().uuid(UUID.fromString(id)).build())
     }
 
     suspend fun togglePin(id: String) {
         val e = g.messages.get(id) ?: return
         g.messages.setPinned(id, !e.pinned)
-        sendAction(A.PIN, Out().uuid(UUID.fromString(id)).b(if (!e.pinned) 1 else 0).build())
+        sendActionFor(id, A.PIN, Out().uuid(UUID.fromString(id)).b(if (!e.pinned) 1 else 0).build())
     }
 
     fun sendTyping(typing: Boolean) {
@@ -347,6 +435,14 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
         if (pending.any { it.kind != MsgKind.TEXT }) kickImages(s)
     }
 
+    /** A non-primary contact connected: send my name and anything they missed. */
+    suspend fun onPeerSessionUp(s: SecureSession) {
+        val peer = engine.peerOf(s) ?: return
+        sendProfile(s)
+        sendStatus(s, null)
+        for (e in g.messages.unacknowledgedIn(convOf(peer.id))) if (e.kind == MsgKind.TEXT) transmitText(s, e, g.messages.textOf(e))
+    }
+
     suspend fun sendProfile(s: SecureSession) {
         val avatar = withContext(Dispatchers.Default) { g.profile.myAvatarForSync() }
         val banner = withContext(Dispatchers.Default) { g.profile.myBannerForSync() }
@@ -360,11 +456,19 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
     suspend fun sendUnpair(s: SecureSession) = s.send(A.UNPAIR)
 
     /** Send time of the oldest text the friend hasn't acknowledged yet (null = none). */
-    suspend fun oldestUnackedTextAt(): Long? = g.messages.unacknowledged().filter { it.kind == MsgKind.TEXT }.minOfOrNull { it.localTime }
+    suspend fun oldestUnackedTextAt(conv: String = ""): Long? = g.messages.unacknowledgedIn(conv).filter { it.kind == MsgKind.TEXT }.minOfOrNull { it.localTime }
 
     /** Called periodically while connected: re-send texts that were not acknowledged. */
     suspend fun retryTick(s: SecureSession) {
         val now = System.currentTimeMillis()
+        val peer = engine.peerOf(s)
+        if (peer != null && !peer.primary) {
+            for (e in g.messages.unacknowledgedIn(convOf(peer.id))) {
+                if (e.kind != MsgKind.TEXT) continue
+                if (now - (lastAttempt[e.id] ?: 0L) > RETRY_MS) transmitText(s, e, g.messages.textOf(e))
+            }
+            return
+        }
         for (e in g.messages.unacknowledged()) {
             if (e.kind != MsgKind.TEXT) continue
             val last = lastAttempt[e.id] ?: 0L

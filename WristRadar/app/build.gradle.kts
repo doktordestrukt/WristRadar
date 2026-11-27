@@ -8,9 +8,9 @@ plugins {
 }
 
 // Version info lives here only; the UI reads it from BuildConfig.
-val wrVersionCode = 22
-val wrVersionName = "18.1.0"
-val wrReleaseLabel = "MK18.1 Horizon"
+val wrVersionCode = 23
+val wrVersionName = "19.0.0"
+val wrReleaseLabel = "MK19 Constellation"
 
 // Optional release signing: create keystore.properties in the project root
 // (storeFile, storePassword, keyAlias, keyPassword). Without it, only debug is signed.

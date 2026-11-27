@@ -75,7 +75,7 @@ fun UpdatesScreen() {
 
         item { SectionLabel("From GitHub (Wi-Fi)") }
         item { WrChip(if (st.githubBusy) "Checking…" else "Check now", { if (!st.githubBusy) g.engine.updater.checkNow() }, secondary = st.github) }
-        item { WristToggle("Check GitHub automatically", s.githubUpdates, "Every few hours, Wi-Fi only") { v -> g.settings.update { it.copy(githubUpdates = v) } } }
+        item { WristToggle("Check GitHub automatically", s.githubUpdates, "Whenever you open the app and every 2 hours") { v -> g.settings.update { it.copy(githubUpdates = v) } } }
 
         item { SectionLabel("Installing") }
         item { WristToggle("Install automatically", s.autoInstallUpdates, "Waits until calls and transfers finish") { v -> g.settings.update { it.copy(autoInstallUpdates = v) } } }

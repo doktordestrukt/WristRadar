@@ -111,6 +111,7 @@ class MainActivity : ComponentActivity() {
         iconHandler.removeCallbacks(iconSync)
         g.lock.checkTimeout(foreground = true)
         g.engine.start()
+        g.engine.updater.onAppOpened()
     }
 
     override fun onStop() {
@@ -151,6 +152,10 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     LaunchedEffect(openChatCount) {
         if (openChatCount > 0 && g.trust.partner.value != null) nav.navigate("chat") { launchSingleTop = true }
     }
+    val groupCall by g.engine.calls.group.state.collectAsState()
+    LaunchedEffect(groupCall?.phase) {
+        if (groupCall?.phase == com.wristradar.audio.GroupCall.Phase.INCOMING && nav.currentDestination?.route != "groupcall") nav.navigate("groupcall") { launchSingleTop = true }
+    }
     val callState by g.engine.calls.state.collectAsState()
     val callSignal by callSignalFlow.collectAsState()
     LaunchedEffect(callState, callSignal) {
@@ -189,6 +194,12 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
         composable("pair/{id}") { PairTargetScreen(nav, it.arguments?.getString("id")?.toIntOrNull() ?: 0) }
         composable("pairing") { PairingFlowScreen(nav) }
         composable("chat") { ChatScreen(nav) }
+        composable("chat/{conv}") { ChatScreen(nav, it.arguments?.getString("conv") ?: "") }
+        composable("chats") { com.wristradar.ui.screens.ChatsScreen(nav) }
+        composable("newgroup") { com.wristradar.ui.screens.NewGroupScreen(nav) }
+        composable("groupinfo/{id}") { com.wristradar.ui.screens.GroupInfoScreen(nav, it.arguments?.getString("id") ?: "") }
+        composable("groupcall") { com.wristradar.ui.screens.GroupCallScreen(nav) }
+        composable("contacts") { com.wristradar.ui.screens.ContactsScreen(nav) }
         composable("image/{id}") { ImageViewerScreen(it.arguments?.getString("id") ?: "") }
         composable("profile") { MyProfileScreen(nav) }
         composable("partner") { PartnerProfileScreen() }

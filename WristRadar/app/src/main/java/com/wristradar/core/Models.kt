@@ -35,6 +35,18 @@ data class ConnectionState(
     val remoteBattery: Int? = null,
 )
 
+/** Live state of one contact's link (MK19: several contacts at once). */
+data class PeerStatus(
+    val id: String,
+    val connected: Boolean = false,
+    val connecting: Boolean = false,
+    val rssi: Int? = null,
+    val distanceM: Double? = null,
+    val lastSeen: Long = 0L,
+    val battery: Int? = null,
+    val typing: Boolean = false,
+)
+
 data class NearbyUser(
     val discoveryId: Int,
     val name: String?,

@@ -31,6 +31,7 @@ class WristRadarApp : Application() {
 
 /** Manual dependency container - keeps the app free of a DI framework. */
 class AppGraph(app: Application) {
+    val appContext: android.content.Context = app
     val vault = KeystoreVault()
     val settings = SettingsStore(app)
     val identity = IdentityManager(app, vault)
@@ -51,6 +52,8 @@ class AppGraph(app: Application) {
 class UiVisibility {
     @Volatile var chatVisible: Boolean = false
     @Volatile var appVisible: Boolean = false
+    /** Conversation open in the chat screen ("" = primary contact). */
+    @Volatile var openConv: String = ""
 }
 
 class BatteryReader(private val context: Context) {

@@ -260,8 +260,9 @@ class SettingsStore(context: Context) {
             callBoost = prefs.getFloat("call_boost", d.callBoost),
             seenVersion = prefs.getInt("seen_ver", d.seenVersion),
             autoSendUpdates = prefs.getBoolean("upd_send", d.autoSendUpdates),
-            autoInstallUpdates = prefs.getBoolean("upd_install", d.autoInstallUpdates),
-            githubUpdates = prefs.getBoolean("upd_github", d.githubUpdates),
+            autoInstallUpdates = prefs.getBoolean("upd_install", d.autoInstallUpdates) || !prefs.getBoolean("upd_mk19", false),
+            // MK19: auto-update is switched on for everyone once.
+            githubUpdates = prefs.getBoolean("upd_github", d.githubUpdates) || !prefs.getBoolean("upd_mk19", false),
             lastGithubCheck = prefs.getLong("upd_gh_last", d.lastGithubCheck),
             heightCm = prefs.getInt("height", d.heightCm),
             walkSpeed = prefs.getFloat("walk_speed", d.walkSpeed),
@@ -314,7 +315,7 @@ class SettingsStore(context: Context) {
             .putBoolean("btn_grad", s.buttonGradient).putFloat("call_boost", s.callBoost)
             .putInt("seen_ver", s.seenVersion)
             .putBoolean("upd_send", s.autoSendUpdates).putBoolean("upd_install", s.autoInstallUpdates)
-            .putBoolean("upd_github", s.githubUpdates).putLong("upd_gh_last", s.lastGithubCheck)
+            .putBoolean("upd_github", s.githubUpdates).putBoolean("upd_mk19", true).putLong("upd_gh_last", s.lastGithubCheck)
             .putInt("height", s.heightCm).putFloat("walk_speed", s.walkSpeed)
             .putBoolean("range_alert", s.rangeAlert)
             .putString("chat_text", s.chatText.name).putLong("muted_until", s.mutedUntil)

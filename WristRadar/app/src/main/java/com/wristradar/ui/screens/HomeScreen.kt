@@ -134,6 +134,13 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
                     tile = false,
                 )
             }
+            item {
+                val contacts by g.trust.contacts.collectAsState()
+                val groups by g.engine.groups.groups.collectAsState()
+                WrChip("💬 All chats & groups", { nav.navigate("chats") },
+                    secondary = "${contacts.size} ${if (contacts.size == 1) "friend" else "friends"} · ${groups.size} ${if (groups.size == 1) "group" else "groups"}",
+                    icon = { Text("👥", fontSize = 16.sp) })
+            }
             if (away) item {
                 Hint("🌙 ${partnerName ?: "Your friend"} is away - extras come back when they're near.")
             }
