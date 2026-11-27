@@ -161,7 +161,9 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     // Announce each new version once, right after it is installed (then the PIN intro, once).
     LaunchedEffect(Unit) {
         val s = g.settings.current
-        if (s.seenVersion < com.wristradar.BuildConfig.VERSION_CODE) nav.navigate("whatsnew") { launchSingleTop = true }
+        // Brand-new install (never saw any version): nothing "new" to announce.
+        if (s.seenVersion == 0) g.settings.update { it.copy(seenVersion = com.wristradar.BuildConfig.VERSION_CODE) }
+        else if (s.seenVersion < com.wristradar.BuildConfig.VERSION_CODE) nav.navigate("whatsnew") { launchSingleTop = true }
         else if (!s.pinIntroSeen && !g.lock.isSet) nav.navigate("pinintro") { launchSingleTop = true }
     }
     // App lock: ask again after the chosen time, but never in the middle of a call.
