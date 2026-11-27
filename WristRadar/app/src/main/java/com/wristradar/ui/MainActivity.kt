@@ -252,6 +252,7 @@ private fun WrNav(openChat: StateFlow<Int>, requestPermissions: () -> Unit) {
     com.wristradar.ui.screens.BlastOverlay()
     com.wristradar.ui.screens.MessageEffectOverlay()
     BlackboxOverlay(onOpenLog = { nav.navigate("securitylog") { launchSingleTop = true } })
+    com.wristradar.ui.components.TextEntryOverlay()
     com.wristradar.ui.screens.LockOverlay()
     }
 }

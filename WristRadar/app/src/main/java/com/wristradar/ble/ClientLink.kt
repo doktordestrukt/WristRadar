@@ -68,11 +68,7 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
     fun adaptPhy(rssi: Int) {
         if (!longRange) return
         val g = gatt ?: return
-        val want = when {
-            rssi < -90 || (codedLevel == 8 && rssi < -84) -> 8
-            rssi < -79 || (codedLevel != 0 && rssi < -69) -> 2
-            else -> 0
-        }
+        val want = PhyPolicy.level(rssi, codedLevel)
         if (want == codedLevel) return
         codedLevel = want
         runCatching {
@@ -146,5 +142,18 @@ class ClientLink(private val context: Context, private val device: BluetoothDevi
         override fun onReadRemoteRssi(g: BluetoothGatt, rssi: Int, status: Int) {
             rssiWait?.complete(if (status == BluetoothGatt.GATT_SUCCESS) rssi else null)
         }
+    }
+}
+
+/**
+ * Max Range PHY steps, shared by both link roles. Switches to long range EARLY (MK18): the
+ * friend only has to be a few metres away before the more robust mode takes over, and only a
+ * very strong signal goes back to the fast mode.
+ */
+object PhyPolicy {
+    fun level(rssi: Int, current: Int): Int = when {
+        rssi < -84 || (current == 8 && rssi < -78) -> 8
+        rssi < -72 || (current != 0 && rssi < -64) -> 2
+        else -> 0
     }
 }

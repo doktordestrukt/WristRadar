@@ -236,6 +236,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     }
 
     fun start() = scope.launch {
+        launch(Dispatchers.IO) { runCatching { g.messages.migrateBodies() } }   // one-time, background
         updater.start()
         walk.start()
         if (running) { applyRadio(); return@launch }
@@ -457,16 +458,23 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     private fun establish(link: Link, keys: SessionKeys) {
         val partner = g.trust.partner.value ?: run { link.close(); return }
         val existing = currentSession()
-        if (existing != null) {
+        if (existing != null && existing.link === link) {
+            // The friend restarted and reconnected on the very same connection: a fresh handshake
+            // on our session's link. Swap in the new keys and keep the link (never drop it).
+            Log.i(TAG, "friend re-keyed our session link")
+            session = null
+            existing.closeKeepLink()
+        } else if (existing != null) {
             val iAmLower = Crypto.compare(g.identity.publicKey, partner.identityKey) < 0
             // Both watches connecting at the same moment: keep the deterministic preferred link.
             // But if our session is older than a few seconds, the friend only reconnected because
             // THEIR side of it died - our old session is a zombie, so the new link always wins.
             val simultaneous = now() - existing.startedAt < SIMULTANEOUS_MS
-            if (simultaneous && link.isClient != iAmLower) { link.close(); return }
+            if (simultaneous && link.isClient != iAmLower) { dropLink(link); return }
             Log.i(TAG, "replacing session (age ${now() - existing.startedAt} ms) with a new link")
             session = null
-            existing.close()
+            dropLink(existing.link)
+            existing.closeKeepLink()
         }
         val s = SecureSession(link, SecureChannel(keys, link.isClient))
         session = s
@@ -474,6 +482,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         sessionSuite = keys.suite
         lastInbound = now()
         authenticatedLinks += link.id
+        partnerAddresses[link.address] = now()
         renewing = false
         connecting = false
         failCount = 0; nextAttemptAt = 0; refreshDeadline = 0
@@ -541,12 +550,12 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             F.SECURE -> {
                 val s = session
                 if (s == null || s.link !== l) {
-                    // Encrypted traffic on a link that never authenticated: a client skipping the
-                    // handshake. Links that were authenticated earlier (replaced/renewed) are ignored.
-                    if (l.id !in authenticatedLinks && !l.isClient) {
-                        g.blackbox.report(ThreatType.UNAUTHORISED_DEVICE, "Encrypted record received without a completed handshake", l)
-                        sendBlackbox(l)
-                    }
+                    // Records on a link that isn't our session: almost always the friend still using a
+                    // connection we've dropped (both connected at once, or we just restarted). They
+                    // can't be decrypted here, so they're harmless; real break-in attempts are caught
+                    // by the handshake/pairing checks. Ask the other side to drop it, so the two
+                    // watches reconnect on one link within seconds instead of waiting for a timeout.
+                    if (droppedLinks.add(l.id)) { Log.i(TAG, "records on a non-session link - asking the other side to drop it"); dropLink(l) }
                     return
                 }
                 val plain = s.open(f.copyOfRange(1, f.size))
@@ -568,10 +577,16 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             // A protected watch refused us (wrong keys during a handshake or pairing): show the
             // intruder screen here. Never on a link that already finished a genuine handshake.
             F.BLACKBOX -> if (l.id !in authenticatedLinks) g.blackbox.accessDeniedHere(l.deviceName, l.address)
+            // The other watch is not using this connection: if it was our session, let it go.
+            F.SESSION_DROP -> {
+                if (session?.link === l) { Log.i(TAG, "friend dropped our session link - switching"); session?.close() }
+                if (l is com.wristradar.ble.ServerLink) l.closeSoft() else l.close()
+            }
         }
     }
 
     private fun onHello(l: Link, f: ByteArray) {
+        if (session?.link === l) Log.i(TAG, "handshake on our session link - friend restarted")
         val partner = g.trust.partner.value
         if (l.isClient || partner == null) { reject(l); return }
         val hs = HandshakeServer(g.identity, partner.identityKey, partner.psk, pqIdentity())
@@ -601,6 +616,17 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
     /** Tells a device that failed authentication it was caught (its WristRadar, if any, shows BLACKBOX). */
     fun sendBlackbox(l: Link) = scope.launch {
         l.send(frame(F.BLACKBOX)); delay(300); l.close()
+    }
+
+    /** Addresses (with time) that completed a genuine handshake: never treated as intruders. */
+    private val partnerAddresses = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val droppedLinks = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Int, Boolean>())
+    private val reportedLinks = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Int, Boolean>())
+
+    /** Tells the other watch we're not using this link, then closes it. */
+    private fun dropLink(l: Link) = scope.launch {
+        if (!l.closed) { runCatching { l.send(frame(F.SESSION_DROP)) }; delay(150) }
+        if (l is com.wristradar.ble.ServerLink) l.closeSoft() else l.close()
     }
 
     private fun onLinkClosed(l: Link) {
@@ -694,6 +720,12 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
             if (want != linkPriority && !messenger.busy) { linkPriority = want; cl.setPriority(want) }
         }
         if (s == null || messenger.busy) linkPriority = -1   // a transfer sets its own priority; re-apply after
+        // While the app is on screen, refresh the signal every tick (5 s) so bars/distance feel live.
+        if (s != null && g.uiVisibility.appVisible && s.link is ClientLink && t - lastStatusSent <= STATUS_MS) {
+            scope.launch {
+                (s.link as ClientLink).readRssi()?.let { partnerEst.add(it); publishDistance() }
+            }
+        }
         if (s != null && t - lastStatusSent > (if (active) STATUS_MS else STATUS_IDLE_MS)) {
             lastStatusSent = t
             scope.launch {
@@ -723,7 +755,11 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
 
     fun onRemoteStatus(battery: Int?, rssi: Int?) = scope.launch {
         remoteBattery = battery
-        if (rssi != null && currentSession()?.link?.isClient == false) partnerEst.add(rssi)
+        val link = currentSession()?.link
+        if (rssi != null && link?.isClient == false) {
+            partnerEst.add(rssi)
+            if (g.settings.current.range == RangeMode.MAX && advertiser.longRangeSupported) (link as? com.wristradar.ble.ServerLink)?.adaptPhy(rssi)
+        }
         publishDistance()
     }
 
@@ -895,6 +931,7 @@ class RadarEngine(val ctx: Context, private val g: AppGraph) {
         private const val SIMULTANEOUS_MS = 8_000L
         /** First versionCode that speaks the ML-KEM-1024 handshake. */
         const val KEM1024_SINCE = 17
+        private const val PARTNER_ADDR_MS = 30 * 60_000L
         /** First versionCode with suite V4 (ML-DSA-87 + SHA-384) and PQ_ID. */
         const val SUITE_V4_SINCE = 18
         /** First versionCode with suite V5 (a new key for every message). */

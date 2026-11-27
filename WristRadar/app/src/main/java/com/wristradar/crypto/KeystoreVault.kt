@@ -17,10 +17,13 @@ import javax.crypto.spec.GCMParameterSpec
 class KeystoreVault(private val alias: String = "wristradar_vault_v1") {
 
     private val ks: KeyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    /** The key handle is looked up once (each lookup is a slow call into the secure hardware). */
+    @Volatile private var cached: SecretKey? = null
 
     @Synchronized
     private fun key(): SecretKey {
-        (ks.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        cached?.let { return it }
+        (ks.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.let { cached = it.secretKey; return it.secretKey }
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         gen.init(
             KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
@@ -29,7 +32,7 @@ class KeystoreVault(private val alias: String = "wristradar_vault_v1") {
                 .setKeySize(256)
                 .build()
         )
-        return gen.generateKey()
+        return gen.generateKey().also { cached = it }
     }
 
     fun encrypt(plain: ByteArray, aad: String? = null): ByteArray {

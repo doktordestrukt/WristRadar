@@ -27,7 +27,7 @@ sealed class CallState {
     data object Idle : CallState()
     data object Outgoing : CallState()
     data object Incoming : CallState()
-    data class Active(val since: Long, val muted: Boolean = false) : CallState()
+    data class Active(val since: Long, val muted: Boolean = false, val partnerMuted: Boolean = false) : CallState()
     data object NoAnswer : CallState()
     data class Ended(val reason: String, val durationMs: Long = 0) : CallState()
 
@@ -101,6 +101,8 @@ class CallManager(private val ctx: Context, private val g: AppGraph, private val
         val st = _state.value as? CallState.Active ?: return
         muted = !st.muted
         _state.value = st.copy(muted = muted)
+        // Tell the friend (MK18+ shows "muted"; older apps ignore it).
+        callId?.let { send(A.CALL_MUTE, Out().raw(it).b(if (muted) 1 else 0).build()) }
     }
 
     fun dismissResult() { if (!_state.value.live) _state.value = CallState.Idle }
@@ -140,6 +142,10 @@ class CallManager(private val ctx: Context, private val g: AppGraph, private val
                     g.notifier.showInfo("Missed call", "You missed a call from ${g.profile.partnerName.value ?: "your partner"}")
                     callId = null; _state.value = CallState.Ended("Missed call")
                 } else finish("Call ended")
+            }
+            A.CALL_MUTE -> if (callId.contentEqualsSafe(id)) {
+                val on = r.b().toInt() == 1
+                (_state.value as? CallState.Active)?.let { _state.value = it.copy(partnerMuted = on) }
             }
             A.CALL_AUDIO -> if (callId.contentEqualsSafe(id) && audioRunning) {
                 r.i() // sequence (ordering is guaranteed by the link; kept for diagnostics)

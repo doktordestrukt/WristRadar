@@ -326,7 +326,7 @@ fun ConnectionInfoScreen() {
             WrChip("Reset calibration", { g.settings.update { it.copy(rssiAt1m = null) }; calNote = null })
         }
         if (conn.detail.isNotBlank()) item { Hint(conn.detail) }
-        item { KeyValue("Signal strength", conn.rssi?.let { "$it dBm · ${DistanceEstimator.signalLabel(it)}" } ?: "--") }
+        item { KeyValue("Signal strength", conn.rssi?.let { "$it dBm · ${DistanceEstimator.signalLabel(it, com.wristradar.WristRadarApp.graph.settings.current.rssiAt1m ?: DistanceEstimator.WATCH_RSSI_AT_1M)}" } ?: "--") }
         item {
             KeyValue(
                 "Estimated distance",

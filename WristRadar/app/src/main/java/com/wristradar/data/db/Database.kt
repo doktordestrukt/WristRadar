@@ -117,6 +117,13 @@ interface MessageDao {
     @Query("UPDATE messages SET bodyEnc = :body, edited = 1 WHERE id = :id")
     suspend fun setBody(id: String, body: ByteArray)
 
+    /** Re-encrypts a body without marking the message as edited (storage format upgrade). */
+    @Query("UPDATE messages SET bodyEnc = :body WHERE id = :id")
+    suspend fun replaceBody(id: String, body: ByteArray)
+
+    @Query("SELECT * FROM messages WHERE bodyEnc IS NOT NULL")
+    suspend fun allWithBody(): List<MessageEntity>
+
     @Query("UPDATE messages SET pinned = :pinned WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
 }

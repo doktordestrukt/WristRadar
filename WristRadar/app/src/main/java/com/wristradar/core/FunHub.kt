@@ -100,7 +100,14 @@ enum class MessageEffect(val id: Int, val emoji: String, val title: String, val 
     LASERS(5, "🔦", "Lasers", false),
     SNOW(6, "❄️", "Snow", true),
     SPARKLES(7, "✨", "Sparkles", true),
-    FIRE(8, "🔥", "Fire", true);
+    FIRE(8, "🔥", "Fire", true),
+    // MK18
+    BUBBLES(9, "🫧", "Bubbles", true),
+    RAINBOW(10, "🌈", "Rainbow", false),
+    SHOOTING_STARS(11, "🌠", "Shooting stars", false),
+    DISCO(12, "🪩", "Disco", false),
+    THUNDER(13, "⚡", "Thunder", false),
+    PETALS(14, "🌸", "Petals", true);
     companion object { fun of(id: Int) = entries.firstOrNull { it.id == id } }
 }
 

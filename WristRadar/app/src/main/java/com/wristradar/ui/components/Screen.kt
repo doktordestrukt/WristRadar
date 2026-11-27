@@ -51,8 +51,23 @@ private const val INPUT_KEY = "wr_text"
  * Launches the Wear OS system text input (Samsung keyboard, voice, handwriting, emoji - whatever
  * the watch provides). Using RemoteInput avoids assuming a specific keyboard is installed.
  */
+/**
+ * Text entry, opened instantly inside WristRadar: a text box that brings up the watch's own
+ * keyboard. (The old way launched the separate system "remote input" screen, which on Samsung
+ * watches often failed to appear on the first tap.)
+ */
 @Composable
 fun rememberTextInput(onClosed: () -> Unit = {}, onText: (String) -> Unit): (String) -> Unit {
+    val cb by rememberUpdatedState(onText)
+    val closed by rememberUpdatedState(onClosed)
+    return androidx.compose.runtime.remember {
+        { label: String -> TextEntry.open(TextEntry.Request(label, { cb(it) }, { closed() })) }
+    }
+}
+
+/** The system input screen (voice, handwriting...). Used as an extra option inside the text box. */
+@Composable
+fun rememberSystemTextInput(onClosed: () -> Unit = {}, onText: (String) -> Unit): (String) -> Unit {
     val cb by rememberUpdatedState(onText)
     val closed by rememberUpdatedState(onClosed)
     // Guard against double launches: opening the system keyboard twice (double tap, or a tap while

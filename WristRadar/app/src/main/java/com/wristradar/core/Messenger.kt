@@ -103,7 +103,7 @@ class Messenger(private val g: AppGraph, private val engine: RadarEngine) {
                 if (!g.uiVisibility.chatVisible) g.notifier.showInfo(g.profile.partnerName.value ?: "Your friend", "👋 Nudge!")
             }
             A.TYPING -> engine.onPartnerTyping(In(p).b().toInt() == 1)
-            A.CALL_INVITE, A.CALL_ACCEPT, A.CALL_DECLINE, A.CALL_END, A.CALL_AUDIO -> engine.calls.onSignal(type, p)
+            A.CALL_INVITE, A.CALL_ACCEPT, A.CALL_DECLINE, A.CALL_END, A.CALL_AUDIO, A.CALL_MUTE -> engine.calls.onSignal(type, p)
             A.SECURITY_NOTICE -> {
                 val what = In(p).str(300)
                 g.blackbox.partnerNotice(what)

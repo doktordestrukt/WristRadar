@@ -23,6 +23,22 @@ class ServerLink(private val host: GattServerHost, val device: BluetoothDevice) 
     override val deviceName: String? get() = runCatching { device.name }.getOrNull()
     override fun writeFragment(bytes: ByteArray) = host.notify(device, bytes)
     override fun close() { host.disconnect(device); closeLocal() }
+    /**
+     * Stop using this link WITHOUT cutting the radio connection: cancelConnection() drops the
+     * whole connection to that watch, including our own client link to it that we want to keep.
+     * The other watch closes its side when it gets SESSION_DROP.
+     */
+    fun closeSoft() { host.forget(device); closeLocal() }
+
+    private var codedLevel = 0
+
+    /** Server side of Max Range: the friend's reported signal drives the same PHY steps. */
+    fun adaptPhy(rssi: Int) {
+        val want = PhyPolicy.level(rssi, codedLevel)
+        if (want == codedLevel) return
+        codedLevel = want
+        host.setPhy(device, want)
+    }
     internal fun closeLocal() = markClosed()
 }
 
@@ -74,6 +90,19 @@ class GattServerHost(private val context: Context, private val onNewLink: (Serve
         val s = server ?: return false
         val c = tx ?: return false
         return s.notifyCharacteristicChanged(device, c, false, bytes) == BluetoothStatusCodes.SUCCESS
+    }
+
+    fun forget(device: BluetoothDevice) { links.remove(device.address) }
+
+    fun setPhy(device: BluetoothDevice, level: Int) {
+        val s = server ?: return
+        runCatching {
+            when (level) {
+                0 -> s.setPreferredPhy(device, BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_LE_1M_MASK or BluetoothDevice.PHY_LE_2M_MASK, BluetoothDevice.PHY_OPTION_NO_PREFERRED)
+                2 -> s.setPreferredPhy(device, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_OPTION_S2)
+                else -> s.setPreferredPhy(device, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_LE_CODED_MASK, BluetoothDevice.PHY_OPTION_S8)
+            }
+        }
     }
 
     fun disconnect(device: BluetoothDevice) {

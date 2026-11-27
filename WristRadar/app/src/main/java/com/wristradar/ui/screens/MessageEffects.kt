@@ -79,11 +79,37 @@ fun MessageEffectOverlay() {
         }
         g.engine.extras.clearEffect()
     }
-    val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER } }
+    // The emoji is drawn ONCE into a bitmap; particles then just stamp it (drawing emoji text from
+    // the font for 40+ particles every frame was the slowest part of effects).
+    val sprite = remember(e) { if (e.emojiParticles) emojiSprite(e.emoji) else null }
+    val paint = remember { Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG) }
     Canvas(Modifier.fillMaxSize().onSizeChanged { size = it.toSize() }.clickable { g.engine.extras.clearEffect() }) {
         val time = t   // read once: one redraw per frame
         val fade = ((DURATION - time) / 0.6f).coerceIn(0f, 1f)
         when (e) {
+            MessageEffect.RAINBOW -> {
+                val bands = listOf(0xFFFF4F5E, 0xFFFF9F43, 0xFFFFE15D, 0xFF4CD787, 0xFF4FA3FF, 0xFF8E6CFF)
+                val grow = (time / 1.2f).coerceIn(0f, 1f)
+                val base = this.size.width * 0.62f
+                bands.forEachIndexed { i, c ->
+                    val r = base - i * 16f
+                    drawArc(Color(c).copy(alpha = 0.75f * fade), 180f, 180f * grow, false,
+                        topLeft = Offset(this.size.width / 2 - r, this.size.height * 0.78f - r),
+                        size = androidx.compose.ui.geometry.Size(r * 2, r * 2),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 14f))
+                }
+            }
+            MessageEffect.THUNDER -> {
+                val flash = if ((time * 3f).toInt() % 2 == 0 && time < 2.2f) 0.55f * (1f - (time * 3f) % 1f) else 0f
+                drawRect(Color.White.copy(alpha = flash * fade))
+                val r = Random((time * 3f).toInt())
+                var x = this.size.width * (0.3f + r.nextFloat() * 0.4f); var y = 0f
+                while (y < this.size.height * 0.8f) {
+                    val nx = x + (r.nextFloat() - 0.5f) * 70f; val ny = y + 40f + r.nextFloat() * 30f
+                    drawLine(Color(0xFFFFF59D).copy(alpha = (flash * 1.6f).coerceAtMost(1f) * fade), Offset(x, y), Offset(nx, ny), strokeWidth = 5f)
+                    x = nx; y = ny
+                }
+            }
             MessageEffect.LASERS -> {
                 val c = Offset(this.size.width / 2, this.size.height / 2)
                 for (i in 0 until 6) {
@@ -95,10 +121,17 @@ fun MessageEffectOverlay() {
             }
             else -> for (p in particles) {
                 if (time < p.delay) continue
-                if (e.emojiParticles) {
-                    paint.textSize = p.size
+                if (sprite != null) {
                     paint.alpha = (255 * fade).toInt()
-                    drawIntoCanvas { it.nativeCanvas.drawText(e.emoji, p.x, p.y, paint) }
+                    val half = p.size / 2
+                    drawIntoCanvas { it.nativeCanvas.drawBitmap(sprite, null, android.graphics.RectF(p.x - half, p.y - half, p.x + half, p.y + half), paint) }
+                } else if (e == MessageEffect.SHOOTING_STARS) {
+                    val tail = Offset(p.x - p.vx * 0.12f, p.y - p.vy * 0.12f)
+                    drawLine(Color.White.copy(alpha = 0.25f * fade), tail, Offset(p.x, p.y), strokeWidth = p.size)
+                    drawCircle(Color.White.copy(alpha = fade), p.size * 0.6f, Offset(p.x, p.y))
+                } else if (e == MessageEffect.DISCO) {
+                    val pulse = 0.55f + 0.45f * sin(time * 9f + p.rot)
+                    drawCircle(p.color.copy(alpha = 0.45f * pulse * fade), p.size * (0.8f + pulse * 0.4f), Offset(p.x, p.y))
                 } else rotate(p.rot, Offset(p.x, p.y)) {
                     drawRect(p.color.copy(alpha = fade), topLeft = Offset(p.x - p.size / 2, p.y - p.size / 4), size = androidx.compose.ui.geometry.Size(p.size, p.size / 2))
                 }
@@ -126,8 +159,23 @@ private fun seed(e: MessageEffect, out: MutableList<Particle>, w: Float, h: Floa
             }
         }
         MessageEffect.FIRE -> repeat(30) { out += Particle(r.nextFloat() * w, h + r.nextFloat() * 40, r.nextFloat() * 20 - 10, -(150f + r.nextFloat() * 160), 24f + r.nextFloat() * 20, Color.White, 0f, 0f, r.nextFloat() * 1.2f) }
-        MessageEffect.LASERS -> Unit
+        MessageEffect.BUBBLES -> repeat(26) { out += Particle(r.nextFloat() * w, h + r.nextFloat() * h * 0.5f, 0f, -(70f + r.nextFloat() * 90), 22f + r.nextFloat() * 26, Color.White, 0f, 0f, r.nextFloat() * 1f) }
+        MessageEffect.PETALS -> repeat(30) { out += Particle(r.nextFloat() * w, -r.nextFloat() * h * 0.6f, 0f, 60f + r.nextFloat() * 70, 20f + r.nextFloat() * 14, Color.White, 0f, 0f, r.nextFloat() * 0.6f) }
+        MessageEffect.SHOOTING_STARS -> repeat(9) { out += Particle(-r.nextFloat() * w * 0.3f, r.nextFloat() * h * 0.6f, 380f + r.nextFloat() * 200, 140f + r.nextFloat() * 80, 3f + r.nextFloat() * 2, Color.White, 0f, 0f, r.nextFloat() * 2f) }
+        MessageEffect.DISCO -> repeat(14) { out += Particle(r.nextFloat() * w, r.nextFloat() * h, 0f, 0f, 30f + r.nextFloat() * 40, col(), r.nextFloat() * 6f, 0f, 0f) }
+        MessageEffect.LASERS, MessageEffect.RAINBOW, MessageEffect.THUNDER -> Unit
     }
+}
+
+/** Renders an emoji once into a 96 px bitmap (stamped by every particle). */
+private fun emojiSprite(emoji: String): android.graphics.Bitmap {
+    val size = 96
+    val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+    val c = android.graphics.Canvas(bmp)
+    val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = size * 0.8f; textAlign = Paint.Align.CENTER }
+    val fm = p.fontMetrics
+    c.drawText(emoji, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, p)
+    return bmp
 }
 
 private fun step(e: MessageEffect, ps: List<Particle>, dt: Float, time: Float) {
@@ -137,7 +185,8 @@ private fun step(e: MessageEffect, ps: List<Particle>, dt: Float, time: Float) {
         when (e) {
             MessageEffect.FIREWORKS, MessageEffect.SPARKLES -> { p.vy += 90f * dt; p.vx *= 0.985f }
             MessageEffect.SNOW -> p.vx = sin(time * 2 + p.size) * 20f
-            MessageEffect.HEARTS, MessageEffect.BALLOONS -> p.vx = sin(time * 2.5f + p.size) * 25f
+            MessageEffect.HEARTS, MessageEffect.BALLOONS, MessageEffect.BUBBLES -> p.vx = sin(time * 2.5f + p.size) * 25f
+            MessageEffect.PETALS -> p.vx = sin(time * 1.8f + p.size) * 45f
             else -> Unit
         }
     }

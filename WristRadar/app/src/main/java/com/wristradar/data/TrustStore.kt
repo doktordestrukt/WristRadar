@@ -39,13 +39,23 @@ class TrustStore(context: Context, private val vault: KeystoreVault) {
      * (first one wins; it can't be swapped later without pairing again). Keystore-sealed so a
      * changed file is detected.
      */
+    @Volatile private var pqCache: ByteArray? = null
+    @Volatile private var pqLoaded = false
+
     val partnerPq: ByteArray?
-        get() = prefs.getString("peer_pq", null)?.let { vault.decrypt(Base64.decode(it, Base64.NO_WRAP), "wr-peer-mldsa87") }
+        get() {
+            if (!pqLoaded) {
+                pqCache = prefs.getString("peer_pq", null)?.let { vault.decrypt(Base64.decode(it, Base64.NO_WRAP), "wr-peer-mldsa87") }
+                pqLoaded = true
+            }
+            return pqCache
+        }
 
     fun savePartnerPq(pub: ByteArray): Boolean {
         val cur = partnerPq
         if (cur != null) return cur.contentEquals(pub)
         prefs.edit().putString("peer_pq", Base64.encodeToString(vault.encrypt(pub, "wr-peer-mldsa87"), Base64.NO_WRAP)).commit()
+        pqCache = pub; pqLoaded = true
         return true
     }
 
@@ -53,6 +63,7 @@ class TrustStore(context: Context, private val vault: KeystoreVault) {
         val now = System.currentTimeMillis()
         prefs.edit()
             .remove("peer_pq")
+            .also { pqCache = null; pqLoaded = true }
             .putString("peer_id", Base64.encodeToString(identityKey, Base64.NO_WRAP))
             .putString("psk_enc", Base64.encodeToString(vault.encrypt(psk, "wr-psk"), Base64.NO_WRAP))
             .putLong("paired_at", now)

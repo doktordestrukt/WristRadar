@@ -154,9 +154,24 @@ fun WhatsNewScreen(nav: NavHostController) {
     }
 }
 
-/** Release notes for the current version. Update this list with every new APK. */
+/**
+ * Release notes. Only [items] (this version's highlights) are shown, once, after updating;
+ * [history] keeps older notes for reference and is never shown again.
+ */
 object WhatsNew {
     val items = listOf(
+        "🧊 No more freezing" to "Opening the chat and switching screens is instant now - messages are no longer re-decrypted every time anything changes.",
+        "🔗 Steadier connection" to "Fixed both watches picking different connections at once - the cause of random disconnects, stuck messages and false security alarms.",
+        "📶 Signal bars fixed" to "Bars now match the distance: right next to each other shows full bars. Tap \"Make distance accurate\" once on the home screen.",
+        "⌨️ Keyboard opens first time" to "Typing now opens instantly inside WristRadar - no more tapping twice.",
+        "🖼 Your watch photos only" to "The photo button shows pictures stored on your watch - never Google Photos.",
+        "📡 Even more range" to "Long-range mode kicks in sooner and on both watches.",
+        "🔇 Mute shows in calls" to "When you mute yourself in a call, your friend sees it.",
+        "🎆 6 new message effects" to "Bubbles, Rainbow, Shooting stars, Disco, Thunder and Petals.",
+    )
+
+    @Suppress("unused")
+    val history = listOf(
         "✨ KK themes" to "8 new KK liquid glass themes: Nude, Champagne, Mocha, Cream, Black & Gold, Blush Nude, Sand and Diamond.",
         "🩹 Fixed: app closing after the PIN" to "Changing the app icon made Samsung close WristRadar. The icon now only changes a minute after you leave the app.",
         "🔑 A new key for every message" to "Each message is locked with its own key, destroyed right after use. Even a stolen key can't open a single older message.",

@@ -140,7 +140,7 @@ fun StatusLine(phase: Phase, modifier: Modifier = Modifier) {
 @Composable
 fun SignalBars(rssi: Int?, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
-    val bars = DistanceEstimator.bars(rssi)
+    val bars = DistanceEstimator.bars(rssi, com.wristradar.WristRadarApp.graph.settings.current.rssiAt1m ?: DistanceEstimator.WATCH_RSSI_AT_1M)
     Row(modifier.height(12.dp), verticalAlignment = Alignment.Bottom) {
         for (i in 1..4) {
             Box(

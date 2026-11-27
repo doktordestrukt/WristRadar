@@ -23,6 +23,11 @@ object F {
     const val HS_REJECT: Byte = 0x23
     /** Sent to a device that failed authentication; its WristRadar shows the BLACKBOX screen. */
     const val BLACKBOX: Byte = 0x24
+    /**
+     * "I'm not using this connection" (MK18+): sent on a duplicate link before closing it, so the
+     * other watch drops its session on it too and both keep the SAME connection.
+     */
+    const val SESSION_DROP: Byte = 0x25
     const val SECURE: Byte = 0x30
 }
 
@@ -86,6 +91,8 @@ object A {
      * signature over "WR-PQID" | sender's Ed25519 key. Only sent inside an authenticated session.
      */
     const val PQ_ID: Byte = 0x65
+    /** In a call: call id + 1 = I muted my microphone, 0 = unmuted (MK18+). */
+    const val CALL_MUTE: Byte = 0x66
 }
 
 class Out {

@@ -137,7 +137,7 @@ fun PartnerProfileScreen() {
         val pt = partner
         if (pt != null) {
             item { KeyValue("Estimated distance", DistanceEstimator.format(conn.distanceM, unit)) }
-            item { KeyValue("Signal", conn.rssi?.let { "$it dBm · ${DistanceEstimator.signalLabel(it)}" } ?: "--") }
+            item { KeyValue("Signal", conn.rssi?.let { "$it dBm · ${DistanceEstimator.signalLabel(it, com.wristradar.WristRadarApp.graph.settings.current.rssiAt1m ?: DistanceEstimator.WATCH_RSSI_AT_1M)}" } ?: "--") }
             item { KeyValue("Their battery", conn.remoteBattery?.let { "$it%" } ?: "Not reported yet") }
             item { KeyValue("Paired since", fmt.format(Date(pt.pairedAt))) }
             item { KeyValue("Last connection", if (last > 0) fmt.format(Date(last)) else "Never") }
@@ -168,31 +168,18 @@ private fun queryImages(ctx: android.content.Context): List<Uri> {
 }
 
 /**
- * Intents that open the user's own gallery, best first: ACTION_PICK (Samsung Gallery and most
- * gallery apps), then GET_CONTENT, then the AndroidX photo picker. Only resolvable ones are kept.
+ * Only Samsung's own on-watch Gallery, and only if it's installed. The system file picker and the
+ * Android photo picker are deliberately NOT used: on Wear OS they surface the Google Photos cloud
+ * library, which the user doesn't want.
  */
 private fun galleryIntents(ctx: android.content.Context): List<Intent> {
-    val pm = ctx.packageManager
-    val candidates = listOf(
-        Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).setType("image/*"),
-        Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE),
-        Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*"),
-    )
-    // Pin each intent to a specific on-watch gallery (Samsung Gallery first) and never Google
-    // Photos, which shows the account's cloud library instead of pictures on the watch.
-    val out = ArrayList<Intent>()
-    for (base in candidates) {
-        val handlers = runCatching { pm.queryIntentActivities(base, 0) }.getOrDefault(emptyList())
-            .filter { it.activityInfo.packageName !in BlockedPickers }
-            .sortedBy { if (it.activityInfo.packageName == SamsungGallery) 0 else 1 }
-        val h = handlers.firstOrNull() ?: continue
-        out += Intent(base).setClassName(h.activityInfo.packageName, h.activityInfo.name)
-    }
-    return out
+    val pick = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).setType("image/*")
+    val h = runCatching { ctx.packageManager.queryIntentActivities(pick, 0) }.getOrDefault(emptyList())
+        .firstOrNull { it.activityInfo.packageName == SamsungGallery } ?: return emptyList()
+    return listOf(Intent(pick).setClassName(h.activityInfo.packageName, h.activityInfo.name))
 }
 
 private const val SamsungGallery = "com.samsung.android.gallery.watch"
-private val BlockedPickers = setOf("com.google.android.apps.photos")
 
 /**
  * Opens the person's gallery app automatically. If the watch has no gallery app, it falls back to
@@ -223,18 +210,13 @@ fun ImagePickerScreen(nav: NavHostController, purpose: String) {
     }
     // The user's own gallery app (Samsung Gallery on Galaxy Watch) is the primary picker.
     val galleryIntents = remember { galleryIntents(ctx) }
-    var showGrid by rememberSaveable { mutableStateOf(galleryIntents.isEmpty()) }
-    var autoLaunched by rememberSaveable { mutableStateOf(false) }
+    // The built-in grid of photos stored on the watch is always the main picker; nothing opens by itself.
+    val showGrid = true
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         res.data?.data?.let(::choose)
     }
-    fun openGallery() {
-        for (i in galleryIntents) {
-            if (runCatching { galleryLauncher.launch(i) }.isSuccess) return
-        }
-        showGrid = true
-    }
-    LaunchedEffect(Unit) { if (!autoLaunched) { autoLaunched = true; openGallery() } }
+    fun openGallery() { galleryIntents.firstOrNull()?.let { runCatching { galleryLauncher.launch(it) } } }
+    LaunchedEffect(Unit) { if (!granted) permLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES) }
     LaunchedEffect(granted, showGrid) {
         if (granted && showGrid) uris = withContext(Dispatchers.IO) { runCatching { queryImages(ctx) }.getOrDefault(emptyList()) }
     }
@@ -243,12 +225,11 @@ fun ImagePickerScreen(nav: NavHostController, purpose: String) {
         item { SectionLabel(when (purpose) { "avatar" -> "Profile picture"; "banner" -> "Profile banner"; else -> "Send a picture" }) }
         if (loading) item { CircularProgressIndicator(Modifier.size(28.dp)) }
         pickError?.let { e -> item { Text(e, fontSize = 11.sp, color = p.danger, textAlign = TextAlign.Center) } }
-        if (galleryIntents.isNotEmpty()) item {
-            WrChip("Open my gallery", { openGallery() }, primary = true, icon = { Icon(painterResource(R.drawable.ic_image), null) })
+        if (!granted) item {
+            WrChip("Allow photo access", { permLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES) }, primary = true)
         }
-        if (!showGrid) item { WrChip("Browse watch photos here", { showGrid = true }) }
-        if (showGrid && !granted) item {
-            WrChip("Allow photo access", { permLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES) }, primary = galleryIntents.isEmpty())
+        if (galleryIntents.isNotEmpty()) item {
+            WrChip("Samsung Gallery", { openGallery() }, icon = { Icon(painterResource(R.drawable.ic_image), null) })
         }
         val list = if (showGrid) uris else null
         if (granted && list != null && list.isEmpty()) item {

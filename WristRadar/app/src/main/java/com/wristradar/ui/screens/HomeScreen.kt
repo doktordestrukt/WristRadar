@@ -91,6 +91,13 @@ fun HomeScreen(nav: NavHostController, requestPermissions: () -> Unit) {
             }
         }
         item { StatusCard(conn, partnerName, partner != null, settings.unit, lastConnected) }
+        if (partner != null && conn.phase == Phase.CONNECTED && settings.rssiAt1m == null) item {
+            WrChip(
+                "📏 Make distance accurate", { g.engine.calibrateDistance() },
+                secondary = "Stand right next to ${partnerName ?: "your friend"}, then tap once",
+                icon = null,
+            )
+        }
         if (partner != null) item {
             val presence by g.engine.presence.collectAsState()
             val lastSeen by g.trust.partnerLastSeen.collectAsState()

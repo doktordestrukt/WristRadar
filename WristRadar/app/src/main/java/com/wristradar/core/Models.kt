@@ -77,4 +77,10 @@ class SecureSession(val link: Link, private val channel: SecureChannel) {
         link.close()
         channel.destroy()
     }
+
+    /** Ends the session but leaves the link to the caller (who drops it softly). */
+    fun closeKeepLink() {
+        inbox.close()
+        channel.destroy()
+    }
 }

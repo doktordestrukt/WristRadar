@@ -135,7 +135,8 @@ fun CallScreen(nav: NavHostController) {
                     when (s) {
                         CallState.Incoming -> "WristRadar call…"
                         CallState.Outgoing -> "Calling…"
-                        is CallState.Active -> (if (s.muted) "Muted · " else "") + mmss(now - s.since)
+                        is CallState.Active -> (if (s.muted) "You're muted · " else "") +
+                            (if (s.partnerMuted) "🔇 ${com.wristradar.WristRadarApp.graph.profile.partnerName.value ?: "Friend"} muted · " else "") + mmss(now - s.since)
                         CallState.NoAnswer -> "No answer"
                         is CallState.Ended -> s.reason + if (s.durationMs > 0) " · " + mmss(s.durationMs) else ""
                         CallState.Idle -> ""

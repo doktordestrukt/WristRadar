@@ -12,7 +12,7 @@ class DistanceEstimator(
     // Wrist-worn watches read ~8-10 dB weaker than phones at the same distance (body absorption).
     private val rssiAt1m: Double = -71.0,
     private val pathLossExponent: Double = 2.0,
-    private val alpha: Double = 0.25,
+    private val alpha: Double = 0.35,
 ) {
     var smoothedRssi: Double? = null; private set
 
@@ -54,20 +54,30 @@ class DistanceEstimator(
             }
         }
 
-        fun signalLabel(rssi: Int?): String = when {
+        /** Reference: signal at about 1 m between two WATCHES (default) or the user's own calibration. */
+        const val WATCH_RSSI_AT_1M = -71
+
+        private fun metres(rssi: Int, ref: Int) = 10.0.pow((ref - rssi) / 20.0)
+
+        /**
+         * Watch-tuned labels. Phone thresholds (-60 dBm = excellent) made two watches touching
+         * look "weak": tiny antennas and wrists absorb ~10 dB. Labels follow the same distance
+         * model as the distance reading, so the two always agree.
+         */
+        fun signalLabel(rssi: Int?, ref: Int = WATCH_RSSI_AT_1M): String = when {
             rssi == null -> "No signal"
-            rssi >= -60 -> "Excellent"
-            rssi >= -70 -> "Good"
-            rssi >= -80 -> "Fair"
+            metres(rssi, ref) < 1.5 -> "Excellent"
+            metres(rssi, ref) < 4.0 -> "Good"
+            metres(rssi, ref) < 10.0 -> "Fair"
             else -> "Weak"
         }
 
-        /** 0..4 bars. */
-        fun bars(rssi: Int?): Int = when {
+        /** 0..4 bars, matching the distance estimate: right next to each other = 4 bars. */
+        fun bars(rssi: Int?, ref: Int = WATCH_RSSI_AT_1M): Int = when {
             rssi == null -> 0
-            rssi >= -60 -> 4
-            rssi >= -70 -> 3
-            rssi >= -80 -> 2
+            metres(rssi, ref) < 1.5 -> 4
+            metres(rssi, ref) < 4.0 -> 3
+            metres(rssi, ref) < 10.0 -> 2
             else -> 1
         }
     }
